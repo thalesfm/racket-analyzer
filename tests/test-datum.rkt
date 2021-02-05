@@ -11,45 +11,31 @@
 (begin-for-syntax
   (define (type->datum τ)
     (syntax->datum
-      (syntax-parse τ
-        [(~Number 'x) #'x]
-        [(~String 'str) #'str]))))
+      (syntax-parse τ #:literals (#%datum-)
+        [(~Number (#%datum- . x)) #'x]
+        [(~String (#%datum- . str)) #'str]))))
+
+;; Prevent #%datum- from epanding into quote
+(define (new-type-eval stx)
+  (error "Not implemented."))
 
 (define-typed-syntax #%datum
   [(_ . x:number) ≫
-   #:with τ_x (mk-type #''x)
+   #:with τ_x (mk-type #'(#%datum- . x))
    --------
    [⊢ (#%datum- . x) ⇒ (Number τ_x)]]
   [(_ . str:string) ≫
-   #:with τ_str (mk-type #''str)
+   #:with τ_str (mk-type #'(#%datum- . str))
    --------
    [⊢ (#%datum- . str) ⇒ (String τ_str)]]
   [(_ . v) ≫
    --------
    [#:error (type-error #:src #'v #:msg "Unsupported literal: ~v" #'v)]])
 
-(define-typed-syntax #%datum-wrapper
-  [(_ . v) ≫
-   #:do [(define type-eval (current-type-eval))
-         (current-type-eval identity)]
-   #:and (~undo (current-type-eval type-eval))
-   --------
-   [≻ (literal v)]])
-
 (define-typed-syntax (+ e1 e2) ≫
   [⊢ e1 ≫ e1- (⇒ (~Number _)) (⇒ τ1)]
   [⊢ e2 ≫ e2- (⇒ (~Number _)) (⇒ τ2)]
-  #:with t (+ (type->datum #'τ1)
-              (type->datum #'τ2))
-  #:with τ (mk-type #''t)
-  --------
-  [⊢ (+- e1- e2-) ⇒ (Number τ)])
-
-#;(define-typed-syntax (- e1 e2) ≫
-  [⊢ e1 ≫ e1- ⇒ (~Number 'x1)]
-  [⊢ e2 ≫ e2- ⇒ (~Number 'x2)]
-  #:with t (+ (syntax->datum #'x1)
-              (syntax->datum #'x2))
-  #:with τ (mk-type #''t)
+  #:with t (+ (type->datum #'τ1) (type->datum #'τ2))
+  #:with τ (mk-type #'t)
   --------
   [⊢ (+- e1- e2-) ⇒ (Number τ)])
