@@ -1,10 +1,6 @@
 #lang racket
 
-; (provide top bot top? bot? sup)
 (provide (all-defined-out))
-
-;; TODO: Define a structure type for `top' and `bot' w/ pretty printing
-;; TODO: Define a way to mark bind-times as potentially non-terminating
 
 (struct type (name) #:transparent)
 

@@ -1,0 +1,4 @@
+ - Define a structure type for `top' and `bot' w/ pretty printing
+ - Define a way to mark bind-times as potentially non-terminating
+ - Add contract checking to lifted procedures
+ - Handle bind-times which are marked as potentially non-terminating
