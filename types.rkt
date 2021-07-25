@@ -1,219 +1,173 @@
-#lang racket
+#lang turnstile
 
-(provide Top Top?
-         Empty Empty? ;; Prolly shouldn't export these
-         Bot Bot?
-         Number Number?
-         Real Real?
-         Integer Integer?
-         Boolean Boolean?
-         String String?
-         datum->type
-         type->datum
-         maybe-bot?
-         static?
-         project
-         type<=?
-         type-comparable?
-         lub
-         seq)
+(provide (type-out ⊤ ⊥ Number Real Integer Boolean String Cons)
+         (for-syntax ⊤ ⊥ Number Real Integer Boolean String Cons
+                     remove-⊥ static? datum->type type->datum
+                     seq ⊑ ⊔))
 
-(require racket/syntax)
+;; Top, Empty, and Bottom
 
-(struct type-info (ctor ctor-args maybe-bot?))
+(define-base-type ⊤)
+(define-base-type ∅)
+(define-type-constructor ⊔-⊥)
 
-(define (maybe-bot? τ)
-  (type-info-maybe-bot? τ))
+(define-syntax (⊥ stx)
+  (syntax-case stx ()
+    [⊥ (identifier? #'⊥) #'(⊔-⊥ ∅)]))
 
-(define (project τ)
-  (struct-copy type-info τ [maybe-bot? #f]))
+(begin-for-syntax
+  (define (⊥? τ)
+    (syntax-parse τ
+      [(~⊔-⊥ ~∅) #t]
+      [_ #f]))
 
-(define (seq . τs)
-  (struct-copy type-info (last τs) [maybe-bot? (ormap maybe-bot? τs)]))
+  (define-syntax ~⊥
+    (pattern-expander
+      (lambda (stx)
+        (syntax-case stx ()
+          [~⊥ (identifier? #'~⊥) #'(~⊔-⊥ ~∅)]))))
 
-;; Top
+  (define ⊤ ((current-type-eval) #'⊤))
+  (define ∅ ((current-type-eval) #'∅))
+  (define ⊥ ((current-type-eval) #'⊥))
 
-(define Top (type-info 'Top '() #f))
+  (define (⊑-⊥? τ)
+    (syntax-parse τ
+      [(~⊔-⊥ _) #t]
+      [_ #f]))
 
-(define (Top? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Top)))
+  (define (⊔-⊥ τ)
+    (define ⊔-τ-⊥
+      (syntax-parse τ
+        [(~⊔-⊥ _) #'τ]
+        [_ #`(⊔-⊥ #,τ)]))
+    ((current-type-eval) ⊔-τ-⊥))
 
-;; Empty
+  (define (remove-⊥ τ)
+    (syntax-parse τ
+      [(~⊔-⊥ inner-τ) #'inner-τ]
+      [_ τ])))
 
-(define Empty (type-info 'Empty '() #f))
+;; Numeric Types
 
-(define (Empty? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Empty)))
+(define-base-type Number)
+(define-base-type Real)
+(define-base-type Integer)
 
-;; Bot
+(begin-for-syntax
+  (define Number ((current-type-eval) #'Number))
+  (define Real ((current-type-eval) #'Real))
+  (define Integer ((current-type-eval) #'Integer)))
 
-(define Bot (type-info 'Empty '() #t))
+;; Other Base Types
 
-(define (Bot? v)
-  (and (Empty? v) (maybe-bot? v)))
+(define-base-type Boolean)
+(define-base-type String)
 
-;; Number
+(begin-for-syntax
+  (define Boolean ((current-type-eval) #'Boolean))
+  (define String ((current-type-eval) #'String)))
 
-(define Number (type-info 'Number '() #f))
+;; Pairs
 
-(define (Number? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Number)))
+(define-type-constructor Cons #:arity = 2)
 
-;; Real
+(begin-for-syntax
+  (define (Cons τ_a τ_d)
+    (define τ
+      (with-syntax ([τ_a (remove-⊥ τ_a)]
+                    [τ_d (remove-⊥ τ_d)])
+        (define static (and (static? #'τ_a) (static? #'τ_d)))
+        (define τ (syntax-property #'(Cons τ_a τ_d) 'static? static))
+        ((current-type-eval) τ)))
+     (seq τ_a τ_d τ)))
 
-(define Real (type-info 'Real '() #f))
+;; Type Utilities
 
-(define (Real? v) 
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Real)))
-
-;; Integer
-
-(define Integer (type-info 'Integer '() #f))
-(define (Integer? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Integer)))
-
-;; Boolean
-
-(define Boolean (type-info 'Boolean '() #f))
-(define (Boolean? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Boolean)))
-
-;; String
-
-(define String (type-info 'String '() #f))
-
-(define (String? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'String)))
-
-;; Literal
-
-(define (Literal v)
-  (type-info 'Literal (list v) #f))
-
-(define (Literal? v)
-  (and (type-info? v)
-       (eq? (type-info-ctor v) 'Literal)))
-
-(define/contract (Literal-v τ)
-  (-> Literal? any/c)
-  (car (type-info-ctor-args τ)))
-
-;; Pair
-
-(define (Pair τ_a τ_d)
-  (type-info 'Pair
-             (list (project τ_a)
-                   (project τ_d)
-                   (and (static? τ_a) (static? τ_d)))
-             (or (maybe-bot? τ_a) (maybe-bot? τ_d))))
-
-(define (Pair? v)
-  (and (type-info? v) (eq? (type-info-ctor v) 'Pair)))
-
-(define/contract (Pair-car τ)
-  (-> Pair? type-info?)
-  (car (type-info-ctor-args τ)))
-
-(define/contract (Pair-cdr τ)
-  (-> Pair? type-info?)
-  (cadr (type-info-ctor-args τ)))
-
-(define/contract (Pair-static? τ)
-  (-> Pair? boolean?)
-  (caddr (type-info-ctor-args τ)))
-
-;;
-
-(define (static? τ)
-  (cond
-    [(Literal? τ) #t]
-    [(Pair? τ) (Pair-static? τ)]
-    [else #f]))
+(begin-for-syntax
+  (define (static? τ)
+    (syntax-parse (remove-⊥ τ) #:literals (quote)
+      [(quote v) #t]
+      [(~Cons _ _) (syntax-property τ 'static?)]
+      [_ #f]))
   
-(define (valid-literal? v)
-  (or (integer? v)
-      (real? v)
-      (boolean? v)
-      (string? v)))
+  (define (valid-literal? v)
+    (or (exact-integer? v)
+        (real? v)
+        (boolean? v)
+        (string? v)))
   
-(define (datum->type v)
-  (cond
-    [(pair? v) (Pair (datum->type (car v)) (datum->type (cdr v)))]
-    [(valid-literal? v) (Literal v)]
-    [else (error)]))
-  
-(define (type->datum τ)
-  (cond
-    [(not (static? τ)) (error)]
-    [(Literal? τ) (Literal-v τ)]
-    [(Pair? τ) (cons (type->datum (Pair-car τ))
-                     (type->datum (Pair-cdr τ)))]
-    [else (error "unreachable")]))
-  
-(define (supertype τ)
-  (define super-τ
+  (define (datum->type v)
     (cond
-      [(Top? τ) #f]
-      [(Empty? τ) #f]
-      [(Number? τ) Top]
-      [(Real? τ) Number]
-      [(Integer? τ) Real]
-      [(Boolean? τ) Top]
-      [(String? τ) Top]
-      [(Pair? τ) #f]
-      [(not (static? τ)) #f]
-      [(exact-integer? (type->datum τ)) Integer]
-      [(real? (type->datum τ)) Real]
-      [(boolean? (type->datum τ)) Boolean]
-      [(string? (type->datum τ)) String]
+      [(pair? v) (Cons (datum->type (car v)) (datum->type (cdr v)))]
+      [(valid-literal? v) (mk-type #`(quote #,v))]
+      [else (error (format "unsupported literal: ~a" v))]))
+  
+  (define (type->datum τ)
+    (syntax-parse (remove-⊥ τ) #:literals (quote)
+      [(quote v) (syntax-e #'v)]
+      [(~Cons τ_a τ_d) (cons (type->datum #'τ_a) (type->datum #'τ_d))]
+      [else (error "unreachable")]))
+
+  (define (seq . vs)
+    (if (ormap ⊑-⊥? vs)
+        (⊔-⊥ (last vs))
+        (last vs)))
+
+  (define (supertype τ)
+    (define super-τ
+      (syntax-parse (remove-⊥ τ)
+        [~⊤ #f]
+        [~∅ #f]
+        [~Number ⊤]
+        [~Real Number]
+        [~Integer Real]
+        [~Boolean ⊤]
+        [~String ⊤]
+        [(~Cons _ _) #f]
+        [_ #:when (not (static? τ)) #f]
+        [_ #:when (exact-integer? (type->datum τ)) Integer]
+        [_ #:when (real? (type->datum τ)) Real]
+        [_ #:when (boolean? (type->datum τ)) Boolean]
+        [_ #:when (string? (type->datum τ)) String]
+        [_ (error "unreachable")]))
+    (if super-τ (seq τ super-τ) #f))
+
+  (define (⊑ τ1 τ2)
+    (syntax-parse #`(#,(remove-⊥ τ1) #,(remove-⊥ τ2))
+      [_ #:when (and (⊑-⊥? τ1) (not (⊑-⊥? τ2))) #f]
+      [(_ ~⊤) #t]
+      [(~∅ _) #t]
+      [((~Cons τ1_a τ1_d) (~Cons τ2_a τ2_d))
+       (and (⊑ #'τ1_a #'τ2_a)
+            (⊑ #'τ1_d #'τ2_d))]
+      [(τ1 τ2) #:when (type=? #'τ1 #'τ2) #t]
+      [(τ1 τ2)
+       #:with super-τ1 (supertype #'τ1)
+       #:when (syntax-e #'super-τ1)
+       (⊑ #'super-τ1 #'τ2)]
       [else #f]))
-  (if super-τ (seq τ super-τ) #f))
 
-(define (type=? τ1 τ2)
-  (cond
-    [(not (eq? (maybe-bot? τ1) (maybe-bot? τ2))) #f]
-    [(and (Literal? τ1) (Literal? τ2))
-     (eqv? (Literal-v τ1) (Literal-v τ2))]
-    [(and (Pair? τ1) (Pair? τ2))
-     (and (type=? (Pair-car τ1) (Pair-car τ2))
-          (type=? (Pair-cdr τ1) (Pair-cdr τ2)))]
-    [else (eq? (type-info-ctor τ1) (type-info-ctor τ2))]))
-  
-(define (type<=? τ1 τ2)
-  (cond
-    [(and (maybe-bot? τ1) (not (maybe-bot? τ2))) #f]
-    [(Top? τ2) #t]
-    [(Empty? τ1) #t]
-    [(and (Pair? τ1) (Pair? τ2))
-     (and (type<=? (Pair-car τ1) (Pair-car τ2))
-          (type<=? (Pair-cdr τ1) (Pair-cdr τ2)))]
-    [(type=? τ1 τ2) #t]
-    [(supertype τ1) => (λ (super-τ1) (type<=? super-τ1 τ2))]
-    [else #f]))
-  
-(define (type-comparable? τ1 τ2)
-  (or (type<=? τ1 τ2) (type<=? τ2 τ1)))
-
-(define (lub τ1 τ2)
-  (define τ
-    (cond
-      [(or (Top? τ1) (Top? τ2)) Top]
-      [(Empty? τ1) τ2]
-      [(Empty? τ2) τ1]
-      [(and (Pair? τ1) (Pair? τ2))
-       (Pair (lub (Pair-car τ1) (Pair-car τ2))
-             (lub (Pair-cdr τ1) (Pair-cdr τ2)))]
-      [(type=? τ1 τ2) τ1]
-      [(and (type<=? τ1 τ2) (supertype τ1)) =>
-       (λ (super-τ1) (lub super-τ1 τ2))]
-      [(and (type<=? τ2 τ1) (supertype τ2)) =>
-       (λ (super-τ2) (lub τ1 super-τ2))]
-      [else (error)]))
-  (seq τ1 τ2 τ))
+  (define (⊔ τ1 τ2)
+    (define τ
+      (syntax-parse #`(#,(remove-⊥ τ1) #,(remove-⊥ τ2))
+        [(~⊤ _) ⊤]
+        [(_ ~⊤) ⊤]
+        [(~∅ τ2) #'τ2]
+        [(τ1 ~∅) #'τ1]
+        [((~Cons τ1_a τ1_d) (~Cons τ2_a τ2_d))
+         (Cons (⊔ #'τ1_a #'τ2_a)
+               (⊔ #'τ1_d #'τ2_d))]
+        [(τ1 τ2) #:when (type=? #'τ1 #'τ2) #'τ1]
+        [(τ1 τ2)
+         #:when (⊑ #'τ1 #'τ2)
+         #:with super-τ1 (supertype #'τ1)
+         #:when (syntax-e #'super-τ1)
+         (⊔ #'super-τ1 #'τ2)]
+        [(τ1 τ2)
+         #:when (⊑ #'τ2 #'τ1)
+         #:with super-τ2 (supertype #'τ2)
+         #:when (syntax-e #'super-τ2)
+         (⊔ #'τ1 #'super-τ2)]
+        [else (error "unreachable")]))
+    (seq τ1 τ2 τ)))

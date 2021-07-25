@@ -1,49 +1,64 @@
 #lang racket
 
-(require rackunit
-         "types.rkt")
+(require turnstile "types.rkt")
+(require (for-syntax rackunit))
 
-;; Tests for type<=?
+;; Tests for datum->type and type->datum
+;; TODO
+ 
+;; Tests for ⊑
 
-;; TODO: Cases for Bot
+;; Test cases for ⊤
+(begin-for-syntax
+  (check-true (⊑ ⊤ ⊤))
+  (check-true (⊑ (datum->type 10) ⊤))
+  (check-true (⊑ Number ⊤))
+  
+  (check-false (⊑ ⊤ (datum->type 10)))
+  (check-false (⊑ ⊤ Number)))
 
-;; Cases for Top and Empty
-(check-true (type<=? Top Top))
-(check-true (type<=? Empty Empty))
-(check-true (type<=? Empty Top))
-(check-true (type<=? Number Top))
-(check-true (type<=? Empty Number))
+;; Test cases for ⊥
+(begin-for-syntax
+  (check-true (⊑ ⊥ ⊥))
+  (check-true (⊑ ⊥ (⊔ ⊤ ⊥)))
+  (check-true (⊑ ⊥ (⊔ (datum->type 10) ⊥)))
+  (check-true (⊑ ⊥ (⊔ Number ⊥)))
 
-(check-false (type<=? Top Empty))
-(check-false (type<=? Top Number))
-(check-false (type<=? Number Empty))
+  (check-false (⊑ ⊥ ⊤))
+  (check-false (⊑ ⊥ (datum->type 10)))
+  (check-false (⊑ ⊥ Number))
+  (check-false (⊑ (⊔ ⊤ ⊥) ⊥))
+  (check-false (⊑ (⊔ (datum->type 10) ⊥) ⊥))
+  (check-false (⊑ (⊔ Number ⊥) ⊥)))
 
-;; Cases for Number, Real, and Integer
-(check-true (type<=? Number Number))
-(check-true (type<=? Real Real))
-(check-true (type<=? Integer Integer))
-(check-true (type<=? Real Number))
-(check-true (type<=? Integer Number))
-(check-true (type<=? Integer Real))
+;; Test cases for Number, Real, and Integer
+(begin-for-syntax
+  (check-true (⊑ Number Number))
+  (check-true (⊑ Real Real))
+  (check-true (⊑ Integer Integer))
+  (check-true (⊑ Real Number))
+  (check-true (⊑ Integer Number))
+  (check-true (⊑ Integer Real))
 
-(check-false (type<=? Number Real))
-(check-false (type<=? Number Integer))
-(check-false (type<=? Real Integer))
+  (check-false (⊑ Number Real))
+  (check-false (⊑ Number Integer))
+  (check-false (⊑ Real Integer)))
 
 ;; Cases for numeric literals
-(check-true (type<=? (datum->type 10) Integer))
-(check-true (type<=? (datum->type 10) Real))
-(check-true (type<=? (datum->type 10) Number))
-(check-true (type<=? (datum->type 1.0) Real))
-(check-true (type<=? (datum->type 1.0) Number))
+(begin-for-syntax
+  (check-true (⊑ (datum->type 10) Integer))
+  (check-true (⊑ (datum->type 10) Real))
+  (check-true (⊑ (datum->type 10) Number))
+  (check-true (⊑ (datum->type 1.0) Real))
+  (check-true (⊑ (datum->type 1.0) Number))
 
-(check-false (type<=? (datum->type 1.0) Integer))
-(check-false (type<=? Integer (datum->type 10)))
-(check-false (type<=? Real (datum->type 1.0)))
+  (check-false (⊑ (datum->type 1.0) Integer))
+  (check-false (⊑ Integer (datum->type 10)))
+  (check-false (⊑ Real (datum->type 1.0))))
 
-;; TODO: Cases for Boolean and String
+;; TODO: Test cases for Boolean and String
 
-;; TODO: Cases for Pairof
+;; TODO: Test cases for Pair
 
-;; Tests for lub
+;; Tests for ⊔
 ;; TODO
