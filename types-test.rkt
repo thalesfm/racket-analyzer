@@ -56,9 +56,40 @@
   (check-false (⊑ Integer (datum->type 10)))
   (check-false (⊑ Real (datum->type 1.0))))
 
-;; TODO: Test cases for Boolean and String
+;; Test cases for Boolean and String
+(begin-for-syntax
+  (check-true (⊑ Boolean Boolean))
+  (check-true (⊑ Boolean ⊤))
+  (check-true (⊑ ⊥ (⊔ Boolean ⊥)))
+  (check-true (⊑ String String))
+  (check-true (⊑ String ⊤))
+  (check-true (⊑ ⊥ (⊔ String ⊥)))
 
-;; TODO: Test cases for Pair
+  (check-false (⊑ ⊤ Boolean))
+  (check-false (⊑ ⊥ Boolean))
+  (check-false (⊑ Boolean String))
+  (check-false (⊑ String Boolean)))
+
+;; TODO: Test cases for pairs
+(begin-for-syntax
+  (check-true (⊑ (datum->type (cons 1 2)) (datum->type (cons 1 2))))
+  (check-true (⊑ (datum->type (cons 1 2))
+                 (Cons (datum->type 1) (datum->type 2))))
+  (check-true (⊑ (datum->type (cons 1 2)) ⊤))
+  (check-true (⊑ ⊥ (⊔ (datum->type (cons 1 2)) ⊥)))
+  (check-true (⊑ (datum->type (cons 1 2)) (Cons ⊤ (datum->type 2))))
+  (check-true (⊑ (datum->type (cons 1 2)) (Cons (datum->type 1) ⊤)))
+  (check-true (⊑ (datum->type '(1 2 . 3))
+                 (Cons (datum->type 1) (Cons (datum->type 2) ⊤))))
+  (check-true (⊑ (datum->type '(1 2 3))
+                 (Cons ⊤ (datum->type '(2 3)))))
+
+  (check-false (⊑ (Cons ⊤ (datum->type 2)) (datum->type (cons 1 2))))
+  (check-false (⊑ (Cons (datum->type 1) ⊤) (datum->type (cons 1 2))))
+  (check-false (⊑ (Cons (datum->type 1) (Cons (datum->type 2) ⊤))
+                  (datum->type '(1 2 . 3))))
+  (check-false (⊑ (Cons ⊤ (datum->type '(2 3)))
+                  (datum->type '(1 2 3)))))
 
 ;; Tests for ⊔
 ;; TODO

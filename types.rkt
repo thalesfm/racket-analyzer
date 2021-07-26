@@ -1,9 +1,9 @@
 #lang turnstile
 
 (provide (type-out ⊤ ⊥ Number Real Integer Boolean String Cons)
-         (for-syntax ⊤ ⊥ Number Real Integer Boolean String Cons
-                     remove-⊥ static? datum->type type->datum
-                     seq ⊑ ⊔))
+         (for-syntax ⊤ ⊥ Number Real Integer Boolean String Cons))
+
+(provide (for-syntax ⊑ ⊔ seq project static? datum->type type->datum))
 
 ;; Top, Empty, and Bottom
 
@@ -31,11 +31,6 @@
   (define ∅ ((current-type-eval) #'∅))
   (define ⊥ ((current-type-eval) #'⊥))
 
-  (define (⊑-⊥? τ)
-    (syntax-parse τ
-      [(~⊔-⊥ _) #t]
-      [_ #f]))
-
   (define (⊔-⊥ τ)
     (define ⊔-τ-⊥
       (syntax-parse τ
@@ -43,7 +38,7 @@
         [_ #`(⊔-⊥ #,τ)]))
     ((current-type-eval) ⊔-τ-⊥))
 
-  (define (remove-⊥ τ)
+  (define (project τ)
     (syntax-parse τ
       [(~⊔-⊥ inner-τ) #'inner-τ]
       [_ τ])))
@@ -68,15 +63,18 @@
   (define Boolean ((current-type-eval) #'Boolean))
   (define String ((current-type-eval) #'String)))
 
-;; Pairs
+;; Pairs and Lists
 
+(define-base-type Null)
 (define-type-constructor Cons #:arity = 2)
 
 (begin-for-syntax
+  (define Null ((current-type-eval) #'Null))
+  
   (define (Cons τ_a τ_d)
     (define τ
-      (with-syntax ([τ_a (remove-⊥ τ_a)]
-                    [τ_d (remove-⊥ τ_d)])
+      (with-syntax ([τ_a (project τ_a)]
+                    [τ_d (project τ_d)])
         (define static (and (static? #'τ_a) (static? #'τ_d)))
         (define τ (syntax-property #'(Cons τ_a τ_d) 'static? static))
         ((current-type-eval) τ)))
@@ -86,7 +84,7 @@
 
 (begin-for-syntax
   (define (static? τ)
-    (syntax-parse (remove-⊥ τ) #:literals (quote)
+    (syntax-parse (project τ) #:literals (quote)
       [(quote v) #t]
       [(~Cons _ _) (syntax-property τ 'static?)]
       [_ #f]))
@@ -100,23 +98,24 @@
   (define (datum->type v)
     (cond
       [(pair? v) (Cons (datum->type (car v)) (datum->type (cdr v)))]
+      [(null? v) Null]
       [(valid-literal? v) (mk-type #`(quote #,v))]
       [else (error (format "unsupported literal: ~a" v))]))
   
   (define (type->datum τ)
-    (syntax-parse (remove-⊥ τ) #:literals (quote)
+    (syntax-parse (project τ) #:literals (quote)
       [(quote v) (syntax-e #'v)]
       [(~Cons τ_a τ_d) (cons (type->datum #'τ_a) (type->datum #'τ_d))]
       [else (error "unreachable")]))
 
   (define (seq . vs)
-    (if (ormap ⊑-⊥? vs)
+    (if (ormap ⊔-⊥? vs)
         (⊔-⊥ (last vs))
         (last vs)))
 
   (define (supertype τ)
     (define super-τ
-      (syntax-parse (remove-⊥ τ)
+      (syntax-parse (project τ)
         [~⊤ #f]
         [~∅ #f]
         [~Number ⊤]
@@ -124,6 +123,7 @@
         [~Integer Real]
         [~Boolean ⊤]
         [~String ⊤]
+        [~Null ⊤]
         [(~Cons _ _) #f]
         [_ #:when (not (static? τ)) #f]
         [_ #:when (exact-integer? (type->datum τ)) Integer]
@@ -134,8 +134,8 @@
     (if super-τ (seq τ super-τ) #f))
 
   (define (⊑ τ1 τ2)
-    (syntax-parse #`(#,(remove-⊥ τ1) #,(remove-⊥ τ2))
-      [_ #:when (and (⊑-⊥? τ1) (not (⊑-⊥? τ2))) #f]
+    (syntax-parse #`(#,(project τ1) #,(project τ2))
+      [_ #:when (and (⊔-⊥? τ1) (not (⊔-⊥? τ2))) #f]
       [(_ ~⊤) #t]
       [(~∅ _) #t]
       [((~Cons τ1_a τ1_d) (~Cons τ2_a τ2_d))
@@ -150,7 +150,7 @@
 
   (define (⊔ τ1 τ2)
     (define τ
-      (syntax-parse #`(#,(remove-⊥ τ1) #,(remove-⊥ τ2))
+      (syntax-parse #`(#,(project τ1) #,(project τ2))
         [(~⊤ _) ⊤]
         [(_ ~⊤) ⊤]
         [(~∅ τ2) #'τ2]
