@@ -1,7 +1,0 @@
- - Define a structure type for `top' and `bot' w/ pretty printing
- - Define a way to mark bind-times as potentially non-terminating
- - Add contract checking to lifted procedures
- - Handle bind-times which are marked as potentially non-terminating
- - Make the the bind-time lattice extensible
- - Make defining primitive operations more user-friendly
- - Cache static? into the bind-time representation for efficiency purposes
