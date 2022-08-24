@@ -28,7 +28,8 @@
     [(and (pair? v1) (pair? v2))
      (cons (lub (car v1) (car v2))
            (lub (cdr v1) (cdr v2)))]
-    [(or (pair? v1) (pair? v2)) Truthy]
+    [(or (pair? v1) (pair? v2))
+     (if (and v1 v2) Truthy Any)]
     [(equal? v1 v2) v1]
     [(or (not (type? v1)) (not (type? v2)))
      (lub (if (type? v1) v1 (typeof v1))
