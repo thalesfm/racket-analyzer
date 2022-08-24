@@ -8,12 +8,8 @@
          (for-syntax syntax/parse))
 
 ;; Abstract value representing types
+;; Since type is #:transparent, defining gen:equal+hash methods is unnecessary
 (struct type (ctor-id args) #:transparent)
-
-(define (type=? t1 t2)
-  (or (eqv? t1 t2)
-      (and (eq? (type-ctor-id t1) (type-ctor-id t2))
-           (andmap type=? (type-args t1) (type-args t2)))))
 
 ;; Syntax for defining both base types and type constructors
 (define-syntax define-type
