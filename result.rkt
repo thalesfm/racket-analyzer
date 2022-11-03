@@ -3,8 +3,10 @@
 (provide (struct-out result))
 ;; (provide seq)
 
-(struct result (value errors) #:transparent)
+(require "errors.rkt")
 
-#;(define (seq . ts)
-  (abstr (abstr-repr (last ts))
-   (ormap abstr>=bot? ts)))
+(struct result (values errors) #:transparent)
+
+(define (seq r1 r2)
+  (result (result-values r2)
+          (errors-append (result-errors r1) (result-errors r2))))

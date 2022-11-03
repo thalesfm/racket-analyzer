@@ -25,7 +25,7 @@
     [(type-out type-id) #'type-id]))
 
 (define-type Any)
-(define-type Truthy)
+(define-type True)
 (define-type Nothing)
 
 (define-type Number)
@@ -39,8 +39,8 @@
 ;; Returns the supertype of `t` when one exists, returns `#f` when there are none/multiple
 (define (supertype t)
   (case (type-ctor-id t)
-    [(Truthy) Any]
-    [(Number) Truthy]
+    [(True) Any]
+    [(Number) True]
     [(Real) Number]
     [(Rational) Real]
     [(Integer) Rational]
@@ -51,7 +51,7 @@
 (define (typeof v)
   (cond
     [(eq? v #f) Any]
-    [(eq? v #t) Truthy]
+    [(eq? v #t) True]
     [(exact-nonnegative-integer? v) Exact-Nonnegative-Integer]
     [(integer? v) Integer]
     [(rational? v) Rational]
