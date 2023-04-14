@@ -1,0 +1,19 @@
+{
+	"name": "Racket",
+	"dockerFile": "Dockerfile",
+	"postCreateCommand": "raco pkg install --auto --no-docs racket-langserver",
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"evzen-wybitul.magic-racket"
+			],
+			"settings": {
+				"magicRacket.languageServer.command": "xvfb-racket"
+			}
+		}
+	}
+
+	// Uncomment when running container via rootless podman
+	// "runArgs": ["--userns=keep-id"],
+	// "workspaceMount": "type=bind,source=${localWorkspaceFolder},target=${containerWorkspaceFolder},Z"
+}
