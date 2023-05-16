@@ -5,24 +5,9 @@
 ;; TODO: Implement multiple bindings for let forms
 ;; TODO: Implement letrec
 
-(require syntax/stx)
+(require syntax/stx "environment.rkt")
 
-(struct closure (arg-ids body env))
-
-(define (make-empty-environment) (hash))
-
-(define (make-base-environment)
-  (hash '+ + '- - '* * '/ /))
-
-(define (bind env sym value)
-  (if (syntax? sym)
-      (bind env (syntax->datum sym) value)
-      (dict-set env sym value)))
-
-(define (lookup env sym)
-  (if (syntax? sym)
-      (lookup env (syntax->datum sym))
-      (dict-ref env sym)))
+(struct closure (arg-ids body environment))
 
 (define (literal? stx)
   (define datum (syntax->datum stx))
@@ -42,8 +27,12 @@
      (if (partial-eval-syntax #'pred env)
          (partial-eval-syntax #'then env)
          (partial-eval-syntax #'else env))]
-    [(let ([id expr]) body) (identifier? #'id)
-     (let ([new-env (bind env #'id (partial-eval-syntax #'expr env))])
+    ;; TODO: Check if there are no duplicate identifiers
+    [(let ([id val-expr] ...) body) (andmap identifier? (syntax->list #'(id ...)))
+     (let ([new-env (for/fold ([env env])
+                              ([id (in-list (syntax->list #'(id ...)))]
+                               [val-expr (in-list (syntax->list #'(val-expr ...)))])
+                      (bind env id (partial-eval-syntax val-expr env)))])
        (partial-eval-syntax #'body new-env))]
     [(proc-expr arg-expr ...)
      (let ([proc (partial-eval-syntax #'proc-expr env)]
@@ -56,7 +45,7 @@
     [(procedure? proc) (apply proc args)]
     [(closure? proc)
      (define eval-env
-       (for/fold ([env (closure-env proc)])
+       (for/fold ([env (closure-environment proc)])
                  ([arg-id (in-list (closure-arg-ids proc))]
                   [arg (in-list args)])
          (bind env arg-id arg)))
