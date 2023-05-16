@@ -2,11 +2,16 @@
 
 (provide partial-eval)
 
-(require syntax/id-table syntax/stx)
+;; TODO: Primitives should evaluate to values as expressions
+;;       (i.e. not only when applied to arguments)
+;; TODO: Add primitives to environment?
+;; TODO: Implement multiple bindings for let forms
 
-(struct closure (arg-ids expr env))
+(require syntax/stx)
 
-(define make-empty-environment make-immutable-bound-id-table)
+(struct closure (arg-ids body env))
+
+(define (make-empty-environment) (hash))
 (define bind dict-set)
 (define lookup dict-ref)
 
@@ -23,29 +28,30 @@
 (define primitive-dict
   (hash '+ + '- - '* * '/ /))
 
-(define (primitive? stx)
-  (define sym (syntax->datum stx))
+(define (primitive? sym)
   (dict-has-key? primitive-dict sym))
 
-(define (apply-primitive stx args)
-  (define sym (syntax->datum stx))
+(define (apply-primitive sym args)
   (define proc (dict-ref primitive-dict sym))
   (apply proc args))
 
 (define (peval stx env)
   (syntax-case* stx (quote lambda if let) module-or-top-identifier=?
-    [id (identifier? #'id) (lookup env #'id)]
+    [id (identifier? #'id) (lookup env (syntax->datum #'id))]
     [datum (literal? #'datum) (syntax->datum #'datum)]
     [(quote datum) (syntax->datum #'datum)]
-    [(lambda (arg-id ...) expr)
-     (closure (syntax->list #'(arg-id ...)) #'expr env)]
-    [(if pred true-expr false-expr)
-     (peval (if (peval #'pred env) #'true-expr #'false-expr) env)]
+    [(lambda (id ...) body)
+     (closure (map syntax->datum (syntax->list #'(id ...))) #'body env)]
+    [(if expr1 expr2 expr3)
+     (if (peval #'expr1 env)
+         (peval #'expr2 env)
+         (peval #'expr3 env))]
     [(let ([id expr]) body) (identifier? #'id)
-     (peval #'body (bind env #'id (peval #'expr env)))]
-    [(op arg-expr ...) (and (identifier? #'op) (primitive? #'op))
+     (let ([new-env (bind env (syntax->datum #'id) (peval #'expr env))])
+       (peval #'body new-env))]
+    [(prim arg-expr ...) (and (identifier? #'prim) (primitive? (syntax->datum #'prim)))
      (let ([args (map (lambda (stx) (peval stx env)) (syntax->list #'(arg-expr ...)))])
-       (apply-primitive #'op args))]
+       (apply-primitive (syntax->datum #'prim) args))]
     [(proc-expr arg-expr ...)
      (let ([proc (peval #'proc-expr env)]
            [args (map (lambda (stx) (peval stx env)) (syntax->list #'(arg-expr ...)))])
@@ -57,4 +63,4 @@
               ([arg-id (in-list (closure-arg-ids proc))]
                [arg (in-list args)])
       (bind env arg-id arg)))
-  (peval (closure-expr proc) eval-env))
+  (peval (closure-body proc) eval-env))
