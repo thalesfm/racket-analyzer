@@ -7,7 +7,7 @@
 
 (require syntax/stx "environment.rkt")
 
-(struct closure (arg-ids body environment))
+(struct closure (arg-id-list body environment))
 
 (define (literal? stx)
   (define datum (syntax->datum stx))
@@ -16,6 +16,9 @@
 (define (partial-eval expr)
   (partial-eval-syntax (datum->syntax #f expr) (make-base-environment)))
 
+(define (bind-multiple env ids values)
+  (foldl (lambda (id value env) (bind env id value)) env ids values))
+
 (define (partial-eval-syntax stx env)
   (syntax-case* stx (quote lambda if let) module-or-top-identifier=?
     [id (identifier? #'id) (lookup env #'id)]
@@ -23,30 +26,30 @@
     [(quote datum) (syntax->datum #'datum)]
     [(lambda (id ...) body)
      (closure (syntax->list #'(id ...)) #'body env)]
-    [(if pred then else)
-     (if (partial-eval-syntax #'pred env)
-         (partial-eval-syntax #'then env)
-         (partial-eval-syntax #'else env))]
+    [(if test-expr then-expr else-expr)
+     (if (partial-eval-syntax #'test-expr env)
+         (partial-eval-syntax #'then-expr env)
+         (partial-eval-syntax #'else-expr env))]
     ;; TODO: Check if there are no duplicate identifiers
-    [(let ([id val-expr] ...) body) (andmap identifier? (syntax->list #'(id ...)))
-     (let ([new-env (for/fold ([env env])
-                              ([id (in-list (syntax->list #'(id ...)))]
-                               [val-expr (in-list (syntax->list #'(val-expr ...)))])
-                      (bind env id (partial-eval-syntax val-expr env)))])
-       (partial-eval-syntax #'body new-env))]
+    [(let ([id val-expr] ...) body)
+     (andmap identifier? (syntax->list #'(id ...)))
+     (partial-eval-syntax
+      #'body
+      (bind-multiple env
+                     (syntax->list #'(id ...))
+                     (map (lambda (stx) (partial-eval-syntax stx env))
+                          (syntax->list #'(val-expr ...)))))]
     [(proc-expr arg-expr ...)
-     (let ([proc (partial-eval-syntax #'proc-expr env)]
-           [args (map (lambda (stx) (partial-eval-syntax stx env))
-                      (syntax->list #'(arg-expr ...)))])
-       (partial-apply proc args))]))
+     (partial-apply (partial-eval-syntax #'proc-expr env)
+                    (map (lambda (stx) (partial-eval-syntax stx env))
+                         (syntax->list #'(arg-expr ...))))]))
 
 (define (partial-apply proc args)
   (cond
     [(procedure? proc) (apply proc args)]
     [(closure? proc)
-     (define eval-env
-       (for/fold ([env (closure-environment proc)])
-                 ([arg-id (in-list (closure-arg-ids proc))]
-                  [arg (in-list args)])
-         (bind env arg-id arg)))
-     (partial-eval-syntax (closure-body proc) eval-env)]))
+     (partial-eval-syntax
+      (closure-body proc)
+      (bind-multiple (closure-environment proc)
+                     (closure-arg-id-list proc)
+                     args))]))
