@@ -2,65 +2,62 @@
 
 (provide partial-eval)
 
-;; TODO: Primitives should evaluate to values as expressions
-;;       (i.e. not only when applied to arguments)
-;; TODO: Add primitives to environment?
 ;; TODO: Implement multiple bindings for let forms
+;; TODO: Implement letrec
 
 (require syntax/stx)
 
 (struct closure (arg-ids body env))
 
 (define (make-empty-environment) (hash))
-(define bind dict-set)
-(define lookup dict-ref)
 
-(define (partial-eval expr)
-  (partial-eval-syntax (datum->syntax #f expr)))
-
-(define (partial-eval-syntax stx)
-  (peval stx (make-empty-environment)))
-
-(define (literal? stx)
-  (define v (syntax->datum stx))
-  (or (boolean? v) (number? v)))
-
-(define primitive-dict
+(define (make-base-environment)
   (hash '+ + '- - '* * '/ /))
 
-(define (primitive? sym)
-  (dict-has-key? primitive-dict sym))
+(define (bind env sym value)
+  (if (syntax? sym)
+      (bind env (syntax->datum sym) value)
+      (dict-set env sym value)))
 
-(define (apply-primitive sym args)
-  (define proc (dict-ref primitive-dict sym))
-  (apply proc args))
+(define (lookup env sym)
+  (if (syntax? sym)
+      (lookup env (syntax->datum sym))
+      (dict-ref env sym)))
 
-(define (peval stx env)
+(define (literal? stx)
+  (define datum (syntax->datum stx))
+  (or (boolean? datum) (number? datum)))
+
+(define (partial-eval expr)
+  (partial-eval-syntax (datum->syntax #f expr) (make-base-environment)))
+
+(define (partial-eval-syntax stx env)
   (syntax-case* stx (quote lambda if let) module-or-top-identifier=?
-    [id (identifier? #'id) (lookup env (syntax->datum #'id))]
+    [id (identifier? #'id) (lookup env #'id)]
     [datum (literal? #'datum) (syntax->datum #'datum)]
     [(quote datum) (syntax->datum #'datum)]
     [(lambda (id ...) body)
-     (closure (map syntax->datum (syntax->list #'(id ...))) #'body env)]
-    [(if expr1 expr2 expr3)
-     (if (peval #'expr1 env)
-         (peval #'expr2 env)
-         (peval #'expr3 env))]
+     (closure (syntax->list #'(id ...)) #'body env)]
+    [(if pred then else)
+     (if (partial-eval-syntax #'pred env)
+         (partial-eval-syntax #'then env)
+         (partial-eval-syntax #'else env))]
     [(let ([id expr]) body) (identifier? #'id)
-     (let ([new-env (bind env (syntax->datum #'id) (peval #'expr env))])
-       (peval #'body new-env))]
-    [(prim arg-expr ...) (and (identifier? #'prim) (primitive? (syntax->datum #'prim)))
-     (let ([args (map (lambda (stx) (peval stx env)) (syntax->list #'(arg-expr ...)))])
-       (apply-primitive (syntax->datum #'prim) args))]
+     (let ([new-env (bind env #'id (partial-eval-syntax #'expr env))])
+       (partial-eval-syntax #'body new-env))]
     [(proc-expr arg-expr ...)
-     (let ([proc (peval #'proc-expr env)]
-           [args (map (lambda (stx) (peval stx env)) (syntax->list #'(arg-expr ...)))])
+     (let ([proc (partial-eval-syntax #'proc-expr env)]
+           [args (map (lambda (stx) (partial-eval-syntax stx env))
+                      (syntax->list #'(arg-expr ...)))])
        (partial-apply proc args))]))
 
 (define (partial-apply proc args)
-  (define eval-env
-    (for/fold ([env (closure-env proc)])
-              ([arg-id (in-list (closure-arg-ids proc))]
-               [arg (in-list args)])
-      (bind env arg-id arg)))
-  (peval (closure-body proc) eval-env))
+  (cond
+    [(procedure? proc) (apply proc args)]
+    [(closure? proc)
+     (define eval-env
+       (for/fold ([env (closure-env proc)])
+                 ([arg-id (in-list (closure-arg-ids proc))]
+                  [arg (in-list args)])
+         (bind env arg-id arg)))
+     (partial-eval-syntax (closure-body proc) eval-env)]))
