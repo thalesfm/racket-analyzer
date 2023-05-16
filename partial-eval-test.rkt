@@ -10,3 +10,4 @@
 (check-equal? (partial-eval '((lambda (x) (+ x 11)) 10)) 21)
 (check-equal? (partial-eval '(if #t 'ok 'not-ok)) 'ok)
 (check-equal? (partial-eval '(if #f 'not-ok 'ok)) 'ok)
+(check-equal? (partial-eval '(+ 1 (* 3 (- 10 7)))) 10)

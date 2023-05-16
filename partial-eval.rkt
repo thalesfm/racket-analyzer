@@ -20,8 +20,20 @@
   (define v (syntax->datum stx))
   (or (boolean? v) (number? v)))
 
+(define primitive-dict
+  (hash '+ + '- - '* * '/ /))
+
+(define (primitive? stx)
+  (define sym (syntax->datum stx))
+  (dict-has-key? primitive-dict sym))
+
+(define (apply-primitive stx args)
+  (define sym (syntax->datum stx))
+  (define proc (dict-ref primitive-dict sym))
+  (apply proc args))
+
 (define (peval stx env)
-  (syntax-case* stx (quote lambda if let +) module-or-top-identifier=?
+  (syntax-case* stx (quote lambda if let) module-or-top-identifier=?
     [id (identifier? #'id) (lookup env #'id)]
     [datum (literal? #'datum) (syntax->datum #'datum)]
     [(quote datum) (syntax->datum #'datum)]
@@ -31,7 +43,9 @@
      (peval (if (peval #'pred env) #'true-expr #'false-expr) env)]
     [(let ([id expr]) body) (identifier? #'id)
      (peval #'body (bind env #'id (peval #'expr env)))]
-    [(+ expr1 expr2) (+ (peval #'expr1 env) (peval #'expr2 env))]
+    [(op arg-expr ...) (and (identifier? #'op) (primitive? #'op))
+     (let ([args (map (lambda (stx) (peval stx env)) (syntax->list #'(arg-expr ...)))])
+       (apply-primitive #'op args))]
     [(proc-expr arg-expr ...)
      (let ([proc (peval #'proc-expr env)]
            [args (map (lambda (stx) (peval stx env)) (syntax->list #'(arg-expr ...)))])
