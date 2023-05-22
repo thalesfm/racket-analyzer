@@ -20,3 +20,8 @@
  exn:fail?
  (lambda ()
    (partial-eval '(let ([x 10] [x 11]) x))))
+(check-equal?
+ (partial-eval
+  '(letrec ([fac (lambda (n) (if (= n 0) 1 (* n (fac (- n 1)))))])
+     (fac 5)))
+ 120)

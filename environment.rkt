@@ -1,11 +1,13 @@
 #lang racket
 
 (provide
+ environment?
  (contract-out
-  [environment? (-> any/c boolean?)]
   [make-empty-environment (-> environment?)]
   [make-base-environment (-> environment?)]
+  [environment-copy (-> environment? environment?)]
   [bind (-> environment? (or/c symbol? syntax?) any/c void)]
+  [bind! (-> environment? (or/c symbol? syntax?) any/c void)]
   [lookup (-> environment? (or/c symbol? syntax?) any/c)]
 ))
 
@@ -18,14 +20,28 @@
 (struct environment (dict) #:constructor-name make-environment)
 
 (define (make-empty-environment)
-  (make-environment (hash)))
+  (make-environment (make-hash)))
 
 (define (make-base-environment)
-  (make-environment (hash '+ + '- - '* * '/ /)))
+  (make-environment (make-hash (list (cons '+ +)
+                                     (cons '- -)
+                                     (cons '* *)
+                                     (cons '/ /)
+                                     (cons '= =)))))
 
+(define (environment-copy env)
+  (make-environment (hash-copy env)))
+
+;; TODO: Highly inneficient, optimize this!!
 (define (bind env sym value)
   (define dict (environment-dict env))
-  (make-environment (dict-set dict (->symbol sym) value)))
+  (define copy (hash-copy dict))
+  (dict-set! copy (->symbol sym) value)
+  (make-environment copy))
+
+(define (bind! env sym value)
+  (define dict (environment-dict env))
+  (dict-set! dict (->symbol sym) value))
 
 (define (lookup env sym)
   (define dict (environment-dict env))

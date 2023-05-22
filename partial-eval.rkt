@@ -4,6 +4,8 @@
 
 ;; TODO: Implement multiple bindings for let forms
 ;; TODO: Implement letrec
+;; TODO: Check if there are no duplicate identifiers in `let`
+;; TODO: Fix closure environments too broad?
 
 (require syntax/stx "environment.rkt")
 
@@ -20,7 +22,7 @@
   (foldl (lambda (id value env) (bind env id value)) env ids values))
 
 (define (partial-eval-syntax stx env)
-  (syntax-case* stx (quote lambda if let) module-or-top-identifier=?
+  (syntax-case* stx (quote lambda if let letrec) module-or-top-identifier=?
     [id (identifier? #'id) (lookup env #'id)]
     [datum (literal? #'datum) (syntax->datum #'datum)]
     [(quote datum) (syntax->datum #'datum)]
@@ -30,7 +32,6 @@
      (if (partial-eval-syntax #'test-expr env)
          (partial-eval-syntax #'then-expr env)
          (partial-eval-syntax #'else-expr env))]
-    ;; TODO: Check if there are no duplicate identifiers
     [(let ([id val-expr] ...) body)
      (andmap identifier? (syntax->list #'(id ...)))
      (partial-eval-syntax
@@ -39,6 +40,12 @@
                      (syntax->list #'(id ...))
                      (map (lambda (stx) (partial-eval-syntax stx env))
                           (syntax->list #'(val-expr ...)))))]
+    [(letrec ([id val-expr]) body)
+     (identifier? #'id)
+     (let* ([new-env (bind env #'id 'undefined)]
+            [val (partial-eval-syntax #'val-expr new-env)])
+       (bind! new-env #'id val)
+       (partial-eval-syntax #'body new-env))]
     [(proc-expr arg-expr ...)
      (partial-apply (partial-eval-syntax #'proc-expr env)
                     (map (lambda (stx) (partial-eval-syntax stx env))
