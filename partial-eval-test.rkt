@@ -25,3 +25,9 @@
   '(letrec ([fac (lambda (n) (if (= n 0) 1 (* n (fac (- n 1)))))])
      (fac 5)))
  120)
+(check-equal?
+  (partial-eval
+   '(letrec ([even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))]
+             [odd? (lambda (n) (if (= n 0) #f (even? (- n 1))))])
+      (even? 101)))
+  #f)

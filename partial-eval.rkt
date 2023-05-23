@@ -40,11 +40,18 @@
                      (syntax->list #'(id ...))
                      (map (lambda (stx) (partial-eval-syntax stx env))
                           (syntax->list #'(val-expr ...)))))]
-    [(letrec ([id val-expr]) body)
-     (identifier? #'id)
-     (let* ([new-env (bind env #'id 'undefined)]
-            [val (partial-eval-syntax #'val-expr new-env)])
-       (bind! new-env #'id val)
+    [(letrec ([id val-expr] ...) body)
+     (andmap identifier? (syntax->list #'(id ...)))
+     (let* ([id-list (syntax->list #'(id ...))]
+            [new-env (bind-multiple env
+                                    id-list
+                                    (build-list (length id-list)
+                                                (const 'undefined)))]
+            [val-list (map (lambda (stx) (partial-eval-syntax stx new-env))
+                           (syntax->list #'(val-expr ...)))])
+       (for ([id (in-list id-list)]
+             [val (in-list val-list)])
+         (bind! new-env id val))
        (partial-eval-syntax #'body new-env))]
     [(proc-expr arg-expr ...)
      (partial-apply (partial-eval-syntax #'proc-expr env)
