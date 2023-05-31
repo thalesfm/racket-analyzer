@@ -51,7 +51,7 @@
                            (syntax->list #'(val-expr ...)))])
        (for ([id (in-list id-list)]
              [val (in-list val-list)])
-         (bind! new-env id val))
+         (rebind! new-env id val))
        (partial-eval-syntax #'body new-env))]
     [(proc-expr arg-expr ...)
      (partial-apply (partial-eval-syntax #'proc-expr env)

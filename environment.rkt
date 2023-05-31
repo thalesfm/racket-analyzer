@@ -5,44 +5,45 @@
  (contract-out
   [make-empty-environment (-> environment?)]
   [make-base-environment (-> environment?)]
-  [environment-copy (-> environment? environment?)]
   [bind (-> environment? (or/c symbol? syntax?) any/c void)]
-  [bind! (-> environment? (or/c symbol? syntax?) any/c void)]
+  [rebind! (-> environment? (or/c symbol? syntax?) any/c void)]
   [lookup (-> environment? (or/c symbol? syntax?) any/c)]
 ))
+
+(struct environment (assoc-lst) #:constructor-name make-environment)
 
 (define (->symbol v)
   (cond
     [(symbol? v) v]
     [(syntax? v) (syntax->datum v)]
-    [else (error)]))
+    [else (raise-argument-error 'v "(or/c symbol? syntax?)" v)]))
 
-(struct environment (dict) #:constructor-name make-environment)
+(define (massoc v lst [is-equal? equal?])
+  (findf (lambda (p) (is-equal? (mcar p) v)) lst))
 
 (define (make-empty-environment)
-  (make-environment (make-hash)))
+  (make-environment null))
 
 (define (make-base-environment)
-  (make-environment (make-hash (list (cons '+ +)
-                                     (cons '- -)
-                                     (cons '* *)
-                                     (cons '/ /)
-                                     (cons '= =)))))
+  (define base-assoc-list
+    (list (mcons '+ +)
+          (mcons '- -)
+          (mcons '* *)
+          (mcons '/ /)
+          (mcons '= =)))
+  (make-environment base-assoc-list))
 
-(define (environment-copy env)
-  (make-environment (hash-copy env)))
-
-;; TODO: Highly inneficient, optimize this!!
 (define (bind env sym value)
-  (define dict (environment-dict env))
-  (define copy (hash-copy dict))
-  (dict-set! copy (->symbol sym) value)
-  (make-environment copy))
+  (define assoc-lst (environment-assoc-lst env))
+  (define pair (mcons (->symbol sym) value))
+  (make-environment (cons pair assoc-lst)))
 
-(define (bind! env sym value)
-  (define dict (environment-dict env))
-  (dict-set! dict (->symbol sym) value))
+(define (rebind! env sym value)
+  (define assoc-lst (environment-assoc-lst env))
+  (define pair (massoc (->symbol sym) assoc-lst))
+  (set-mcdr! pair value))
 
 (define (lookup env sym)
-  (define dict (environment-dict env))
-  (dict-ref dict (->symbol sym)))
+  (define assoc-lst (environment-assoc-lst env))
+  (define pair (massoc (->symbol sym) assoc-lst))
+  (mcdr pair))
