@@ -2,24 +2,34 @@
 
 (require "types.rkt")
 
-(provide (all-defined-out))
+(provide
+ (all-from-out "types.rkt")
+ (contract-out [abstract? (-> any/c boolean?)]
+               [<=? (-> abstract? abstract? boolean?)]
+               [lub (-> abstract? abstract? abstract?)]))
 
-;; Partial order predicate between abstract values
-(define (value<=? v1 v2)
+(define (abstract? v)
+  (cond [(boolean? v) #t]
+        [(number? v) #t]
+        [(type? v) #t]
+        [(cons? v) (and (abstract? (car v))
+                        (abstract? (cdr v)))]
+        [else #f]))
+
+(define (<=? v1 v2)
   (cond
     [(equal? v2 Any) #t]
     [(equal? v1 Nothing) #t]
     [(and (pair? v1) (pair? v2))
-     (and (value<=? (car v1) (car v2))
-          (value<=? (cdr v1) (cdr v2)))]
+     (and (<=? (car v1) (car v2))
+          (<=? (cdr v1) (cdr v2)))]
     [(equal? v1 v2) #t]
     [(or (not (type? v1)) (not (type? v2)))
-     (value<=? (if (type? v1) v1 (typeof v1))
+     (<=? (if (type? v1) v1 (typeof v1))
           (if (type? v2) v2 (typeof v2)))]
-    [(supertype v1) => (λ (super-v1) (value<=? super-v1 v2))]
+    [(supertype v1) => (λ (super-v1) (<=? super-v1 v2))]
     [else #f]))
 
-;; Computes the least-upper-bound between two abstract values
 (define (lub v1 v2)
   (cond
     [(or (equal? v1 Any) (equal? v2 Any)) Any]
@@ -34,7 +44,7 @@
     [(or (not (type? v1)) (not (type? v2)))
      (lub (if (type? v1) v1 (typeof v1))
           (if (type? v2) v2 (typeof v2)))]
-    [(value<=? v1 v2) v2]
-    [(value<=? v2 v1) v1]
+    [(<=? v1 v2) v2]
+    [(<=? v2 v1) v1]
     [else
      (if (and v1 v2) True Any)]))

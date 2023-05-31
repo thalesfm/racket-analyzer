@@ -2,11 +2,6 @@
 
 (provide partial-eval)
 
-;; TODO: Implement multiple bindings for let forms
-;; TODO: Implement letrec
-;; TODO: Check if there are no duplicate identifiers in `let`
-;; TODO: Fix closure environments too broad?
-
 (require syntax/stx "environment.rkt")
 
 (struct closure (arg-id-list body environment))

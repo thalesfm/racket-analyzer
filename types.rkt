@@ -1,7 +1,5 @@
 #lang racket
 
-;; TODO: Define other base types (i.e. Char, String, Symbol, Vector, etc.)
-
 (provide (all-defined-out))
 
 (require racket/provide-syntax
