@@ -1,16 +1,15 @@
 #lang racket
 
-(require "bind-time.rkt")
+(require "domain.rkt")
 
-(provide (all-defined-out))
+(provide lift)
 
 (define (lift proc)
   (lambda args
-    (cond
-      [(andmap singleton? args) (apply proc args)]
-      [else top])))
+    (if (andmap constant? args) (apply proc args) Any)))
 
-(define-syntax lift/contract 
+#|
+(define-syntax lift/contract
   (syntax-rules (->)
     [(lift/contract (-> dom ... range) proc)
      (lift/contract-helper (list dom ...) range proc)]))
@@ -24,6 +23,7 @@
        (apply proc args)]
       [(andmap bind-time-comparable? args args-bt) out-bt]
       [else bot])))
+|#
 
 #|
 (define bind-time+

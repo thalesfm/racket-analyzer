@@ -26,6 +26,9 @@
 (define-type True)
 (define-type Nothing)
 
+(define (Any? v) (eq? v Any))
+(define (Nothing? v) (eq? v Nothing))
+
 (define-type Number)
 (define-type Real)
 (define-type Rational)

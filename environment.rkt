@@ -10,6 +10,8 @@
   [lookup (-> environment? (or/c symbol? syntax?) any/c)]
 ))
 
+(require "domain.rkt" "lift.rkt")
+
 (struct environment (assoc-lst) #:constructor-name make-environment)
 
 (define (->symbol v)
@@ -26,11 +28,14 @@
 
 (define (make-base-environment)
   (define base-assoc-list
-    (list (mcons '+ +)
-          (mcons '- -)
-          (mcons '* *)
-          (mcons '/ /)
-          (mcons '= =)))
+    (list (mcons '+ (lift +))
+          (mcons '- (lift -))
+          (mcons '* (lift *))
+          (mcons '/ (lift /))
+          (mcons '= (lift =))
+          (mcons 'read (lambda () Any))
+          (mcons 'error (lambda () Nothing))
+    ))
   (make-environment base-assoc-list))
 
 (define (bind env sym value)

@@ -1,7 +1,6 @@
 - Check for duplicate identifiers in `let` and `letrec`
 - Implement more tests for "domain.rkt"
 - Better organize all tests
-- Alter `partial-eval` to work with abstract values
 - Refactor abstract value representation as a product of multiple domains (?)
 - Add support for other data types (e.g.: chars, strings, symbols, etc.)
 - Add error information to bottom values

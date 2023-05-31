@@ -2,13 +2,16 @@
 
 (provide partial-eval)
 
-(require syntax/stx "environment.rkt")
+(require syntax/stx "environment.rkt" "domain.rkt")
 
 (struct closure (arg-id-list body environment))
 
+;; TODO: Implement as syntax with short-circuit semantics
+(define (seq . vs)
+  (if (ormap Nothing? vs) Nothing (last vs)))
+
 (define (literal? stx)
-  (define datum (syntax->datum stx))
-  (or (boolean? datum) (number? datum)))
+  (abstract? (syntax->datum stx)))
 
 (define (partial-eval expr)
   (partial-eval-syntax (datum->syntax #f expr) (make-base-environment)))
@@ -19,39 +22,41 @@
 (define (partial-eval-syntax stx env)
   (syntax-case* stx (quote lambda if let letrec) module-or-top-identifier=?
     [id (identifier? #'id) (lookup env #'id)]
+
     [datum (literal? #'datum) (syntax->datum #'datum)]
     [(quote datum) (syntax->datum #'datum)]
+
     [(lambda (id ...) body)
      (closure (syntax->list #'(id ...)) #'body env)]
+
     [(if test-expr then-expr else-expr)
-     (if (partial-eval-syntax #'test-expr env)
-         (partial-eval-syntax #'then-expr env)
-         (partial-eval-syntax #'else-expr env))]
-    [(let ([id val-expr] ...) body)
-     (andmap identifier? (syntax->list #'(id ...)))
-     (partial-eval-syntax
-      #'body
-      (bind-multiple env
-                     (syntax->list #'(id ...))
-                     (map (lambda (stx) (partial-eval-syntax stx env))
-                          (syntax->list #'(val-expr ...)))))]
-    [(letrec ([id val-expr] ...) body)
-     (andmap identifier? (syntax->list #'(id ...)))
-     (let* ([id-list (syntax->list #'(id ...))]
-            [new-env (bind-multiple env
-                                    id-list
-                                    (build-list (length id-list)
-                                                (const 'undefined)))]
-            [val-list (map (lambda (stx) (partial-eval-syntax stx new-env))
-                           (syntax->list #'(val-expr ...)))])
-       (for ([id (in-list id-list)]
-             [val (in-list val-list)])
-         (rebind! new-env id val))
-       (partial-eval-syntax #'body new-env))]
+     (let ([test-v (partial-eval-syntax #'test-expr env)])
+       (cond
+         [(eq? test-v Nothing) Nothing]
+         [(<=? test-v True) (partial-eval-syntax #'then-expr env)]
+         [(eq? test-v #f) (partial-eval-syntax #'else-expr env)]
+         [(eq? test-v Any) (lub (partial-eval-syntax #'then-expr env)
+                                (partial-eval-syntax #'else-expr env))]))]
+
+    [(let ([id val-expr]) body)
+     (identifier? #'id)
+     (let ([val (partial-eval-syntax #'val-expr env)])
+       (seq val (partial-eval-syntax #'body (bind env #'id val))))]
+
+    [(letrec ([id val-expr]) body)
+     (identifier? #'id)
+     (let* ([new-env (bind env #'id Nothing)]
+            [val (partial-eval-syntax #'val-expr new-env)])
+       (rebind! new-env #'id val)
+       (seq val (partial-eval-syntax #'body new-env)))]
+
+    ;; TODO: Short-circuit when proc or any of the args evaluate to Nothing
     [(proc-expr arg-expr ...)
-     (partial-apply (partial-eval-syntax #'proc-expr env)
-                    (map (lambda (stx) (partial-eval-syntax stx env))
-                         (syntax->list #'(arg-expr ...))))]))
+     (let ([proc (partial-eval-syntax #'proc-expr env)]
+           [args (map (lambda (stx) (partial-eval-syntax stx env))
+                      (syntax->list #'(arg-expr ...)))])
+       (seq (apply seq (cons proc args)) (partial-apply proc args)))]
+))
 
 (define (partial-apply proc args)
   (cond

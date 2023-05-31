@@ -5,8 +5,10 @@
 (provide
  (all-from-out "types.rkt")
  (contract-out [abstract? (-> any/c boolean?)]
+               [constant? (-> abstract? boolean?)]
                [<=? (-> abstract? abstract? boolean?)]
-               [lub (-> abstract? abstract? abstract?)]))
+               [lub (-> abstract? abstract? abstract?)]
+))
 
 (define (abstract? v)
   (cond [(boolean? v) #t]
@@ -15,6 +17,15 @@
         [(cons? v) (and (abstract? (car v))
                         (abstract? (cdr v)))]
         [else #f]))
+
+(define (constant? v)
+  (cond
+    [(boolean? v) #t]
+    [(number? v) #t]
+    [(type? v) #f]
+    [(pair? v) (and (constant? (car v))
+                    (constant? (cdr v)))]
+    [else #f]))
 
 (define (<=? v1 v2)
   (cond
