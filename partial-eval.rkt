@@ -2,7 +2,9 @@
 
 (provide partial-eval)
 
-(require (for-syntax racket/syntax)
+(require (for-syntax racket/syntax
+                     syntax/for-body
+                     syntax/parse)
          syntax/parse
          syntax/stx
          "environment.rkt"
@@ -25,6 +27,17 @@
            (seq temp-id
                 (let/seq rest
                   (let ([id temp-id]) body0 body ...)))))]))
+
+(define-syntax (for/seq stx)
+  (syntax-parse stx
+    [(for/seq (for-clause ...) body-or-break ... body)
+     #:with ((pre-body ...) (post-body ...))
+            (split-for-body this-syntax #'(body-or-break ... body))
+     #'(for/fold/derived this-syntax
+                         ([accum (void)])
+                         (for-clause ...)
+         pre-body ...
+         (seq accum (let () post-body ...)))]))
 
 (define (literal? stx)
   (abstract? (syntax->datum stx)))
@@ -74,12 +87,10 @@
 
     [((~datum letrec) ~! ([id:id expr:expr] ...) body)
      (let ([new-env (create-locations env #'(id ...))])
-       (seq (for/fold ([maybe-error #f])
-                      ([id (in-syntax #'(id ...))]
-                       [expr (in-syntax #'(expr ...))])
-              (seq maybe-error
-                (let/seq ([v (partial-eval-syntax expr new-env)])
-                  (rebind! new-env id v) #f)))
+       (seq (for/seq ([id (in-syntax #'(id ...))]
+                      [expr (in-syntax #'(expr ...))])
+              (let/seq ([v (partial-eval-syntax expr new-env)])
+                (rebind! new-env id v)))
             (partial-eval-syntax #'body new-env)))]
 
     [(proc-expr:expr arg-expr:expr ...)

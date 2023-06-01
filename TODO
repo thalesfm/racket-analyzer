@@ -1,10 +1,9 @@
-- Reimplement multiple bindings for `let` and `letrec`
-- Check for duplicate identifiers in `let` and `letrec`
+- Add error information to bottom values
+- Check for duplicate identifiers in `let`
 - Implement more tests for "domain.rkt"
 - Better organize all tests
 - Refactor abstract value representation as a product of multiple domains (?)
 - Add support for other data types (e.g.: chars, strings, symbols, etc.)
-- Add error information to bottom values
 - Implement monomorphic analysis for recursive procedures (w/ fixpoint iteration, etc.)
 - Implement code generation
 - Check performance impact of using contracts (especially `abstract?`)
