@@ -32,8 +32,16 @@
 (define (partial-eval expr)
   (partial-eval-syntax (datum->syntax #f expr) (make-base-environment)))
 
-(define (bind-multiple env ids values)
-  (foldl (lambda (id value env) (bind env id value)) env ids values))
+(define (bind-multiple env id-list vs)
+  (for/fold ([env env])
+            ([id (in-syntax id-list)]
+             [v (in-list vs)])
+    (bind env id v)))
+
+(define (create-locations env id-list)
+  (for/fold ([env env])
+            ([id (in-syntax id-list)])
+    (bind env id Nothing)))
 
 ;; FIXME: Avoid using ~datum in patterns if possible
 (define (partial-eval-syntax stx env)
@@ -50,7 +58,7 @@
      (syntax->datum #'datum)]
 
     [((~datum lambda) ~! (id:id ...) body)
-     (closure (syntax->list #'(id ...)) #'body env)]
+     (closure #'(id ...) #'body env)]
 
     [((~datum if) ~! test:expr then:expr else:expr)
      (let/seq ([test-v (partial-eval-syntax #'test env)])
@@ -60,15 +68,19 @@
          [(eq? test-v Any) (lub (partial-eval-syntax #'then env)
                                 (partial-eval-syntax #'else env))]))]
 
-    [((~datum let) ~! ([id:id expr:expr]) body)
-     (let/seq ([v (partial-eval-syntax #'expr env)])
-       (partial-eval-syntax #'body (bind env #'id v)))]
+    [((~datum let) ~! ([id:id expr:expr] ...) body)
+     (let/seq ([vs (partial-eval-syntaxes #'(expr ...) env)])
+       (partial-eval-syntax #'body (bind-multiple env #'(id ...) vs)))]
 
-    [((~datum letrec) ~! ([id:id expr:expr]) body)
-     (let ([new-env (bind env #'id Nothing)])
-       (let/seq ([v (partial-eval-syntax #'expr new-env)])
-         (rebind! new-env #'id v)
-         (partial-eval-syntax #'body new-env)))]
+    [((~datum letrec) ~! ([id:id expr:expr] ...) body)
+     (let ([new-env (create-locations env #'(id ...))])
+       (seq (for/fold ([maybe-error #f])
+                      ([id (in-syntax #'(id ...))]
+                       [expr (in-syntax #'(expr ...))])
+              (seq maybe-error
+                (let/seq ([v (partial-eval-syntax expr new-env)])
+                  (rebind! new-env id v) #f)))
+            (partial-eval-syntax #'body new-env)))]
 
     [(proc-expr:expr arg-expr:expr ...)
      (let/seq ([proc (partial-eval-syntax #'proc-expr env)]
