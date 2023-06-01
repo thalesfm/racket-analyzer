@@ -6,9 +6,12 @@
 
 (struct closure (arg-id-list body environment))
 
-;; TODO: Implement as syntax with short-circuit semantics
-(define (seq . vs)
-  (if (ormap Nothing? vs) Nothing (last vs)))
+(define-syntax (seq stx)
+  (syntax-case stx (=>)
+    [(seq expr => proc-expr)
+     #'(let ([v expr]) (if (Nothing? v) Nothing (proc-expr v)))]
+    [(seq expr ... last-expr)
+     #'(if (or (Nothing? expr ...)) Nothing last-expr)]))
 
 (define (literal? stx)
   (abstract? (syntax->datum stx)))
@@ -50,13 +53,17 @@
        (rebind! new-env #'id val)
        (seq val (partial-eval-syntax #'body new-env)))]
 
-    ;; TODO: Short-circuit when proc or any of the args evaluate to Nothing
     [(proc-expr arg-expr ...)
-     (let ([proc (partial-eval-syntax #'proc-expr env)]
-           [args (map (lambda (stx) (partial-eval-syntax stx env))
-                      (syntax->list #'(arg-expr ...)))])
-       (seq (apply seq (cons proc args)) (partial-apply proc args)))]
+     (seq (partial-eval-syntax #'proc-expr env) => (λ (proc)
+       (seq (partial-eval-syntax* #'(arg-expr ...) env) => (λ (args)
+         (partial-apply proc args)))))]
 ))
+
+(define (partial-eval-syntax* lst-stx env)
+  (for/foldr ([lst null])
+             ([stx (in-syntax lst-stx)])
+    (seq lst (seq (partial-eval-syntax stx env) =>
+               (λ (v) (cons v lst))))))
 
 (define (partial-apply proc args)
   (cond

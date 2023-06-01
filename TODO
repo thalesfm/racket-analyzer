@@ -1,3 +1,4 @@
+- Reimplement multiple bindings for `let` and `letrec`
 - Check for duplicate identifiers in `let` and `letrec`
 - Implement more tests for "domain.rkt"
 - Better organize all tests
