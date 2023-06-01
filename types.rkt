@@ -35,8 +35,6 @@
 (define-type Integer)
 (define-type Exact-Nonnegative-Integer)
 
-; TODO: Define Char, String, Symbol, Vector, Lambda, etc.
-
 ;; Returns the supertype of `t` when one exists, returns `#f` when there are none/multiple
 (define (supertype t)
   (case (type-ctor-id t)
