@@ -8,8 +8,8 @@
   [bind (-> environment? identifier? any/c environment?)]
   [bind* (-> environment? stx-list? list? environment?)]
   [bind! (-> environment? identifier? any/c void?)]
-  [create-location (-> environment? identifier? environment?)]
-  [create-locations (-> environment? stx-list? environment?)]
+  [fresh (-> environment? identifier? environment?)]
+  [fresh* (-> environment? stx-list? environment?)]
   [lookup (-> environment? identifier? any/c)]
 ))
 
@@ -34,16 +34,16 @@
   (make-environment null))
 
 (define (make-base-environment)
-  (define base-assoc-list
-    (list (mcons '+ (lift +))
-          (mcons '- (lift -))
-          (mcons '* (lift *))
-          (mcons '/ (lift /))
-          (mcons '= (lift =))
-          (mcons 'read (lambda () Any))
-          (mcons 'error (lambda () Nothing))
-    ))
-  (make-environment base-assoc-list))
+  (let* ([Γ (make-empty-environment)]
+         [Γ (bind Γ #'+ (lift +))]
+         [Γ (bind Γ #'+ (lift +))]
+         [Γ (bind Γ #'- (lift -))]
+         [Γ (bind Γ #'* (lift *))]
+         [Γ (bind Γ #'/ (lift /))]
+         [Γ (bind Γ #'= (lift =))]
+         [Γ (bind Γ #'read (λ () Any))]
+         [Γ (bind Γ #'error (λ () Nothing))])
+    Γ))
 
 (define (bind env id v)
   (define lst (environment-assoc-list env))
@@ -63,13 +63,13 @@
              [v (in-list v-list)])
     (bind env id v)))
 
-(define (create-location env id)
+(define (fresh env id)
   (bind env id Nothing))
 
-(define (create-locations env id-list)
+(define (fresh* env id-list)
   (for/fold ([env env])
             ([id (in-syntax id-list)])
-    (create-location env id)))
+    (fresh env id)))
 
 (define (lookup env id)
   (define lst (environment-assoc-list env))

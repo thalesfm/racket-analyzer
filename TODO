@@ -1,5 +1,4 @@
 - Add error information to bottom values
-- Check for duplicate identifiers in `let`
 - Implement more tests for "domain.rkt"
 - Better organize all tests
 - Refactor abstract value representation as a product of multiple domains (?)

@@ -44,11 +44,13 @@
                                 (partial-eval-syntax #'else env))]))]
 
     [((~datum let) ~! ([id:id expr:expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
+                 "duplicate identifier"
      (let/seq ([vs (partial-eval-syntaxes #'(expr ...) env)])
        (partial-eval-syntax #'body (bind* env #'(id ...) vs)))]
 
     [((~datum letrec) ~! ([id:id expr:expr] ...) body)
-     (let ([new-env (create-locations env #'(id ...))])
+     (let ([new-env (fresh* env #'(id ...))])
        (seq (for/seq ([id (in-syntax #'(id ...))]
                       [expr (in-syntax #'(expr ...))])
               (let/seq ([v (partial-eval-syntax expr new-env)])
