@@ -34,6 +34,7 @@
           (split-for-body this-syntax #'(body-or-break ... body))
     #'(for/fold/derived this-syntax
                         ([accum (void)])
-                        (for-clause ...)
+                        (for-clause ...
+                         #:break (Nothing? accum))
         pre-body ...
         (seq accum (let () post-body ...)))])
