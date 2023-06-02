@@ -2,42 +2,15 @@
 
 (provide partial-eval)
 
-(require (for-syntax racket/syntax
-                     syntax/for-body
-                     syntax/parse)
-         syntax/parse
-         syntax/stx
+(require syntax/parse
          "environment.rkt"
-         "domain.rkt")
+         "domain.rkt"
+         "seq.rkt")
 
 (struct closure (arg-id-list body environment))
 
-(define-syntax (seq stx)
-  (syntax-case stx ()
-    [(_ expr ... final-expr)
-     #'(if (or (Nothing? expr) ...) Nothing final-expr)]))
-
-(define-syntax (let/seq stx)
-  (syntax-case stx ()
-    [(let/seq () body0 body ...)
-     #'(let () body0 body ...)]
-    [(let/seq ([id expr] . rest) body0 body ...)
-     (with-syntax ([temp-id (generate-temporary #'id)])
-       #'(let ([temp-id expr])
-           (seq temp-id
-                (let/seq rest
-                  (let ([id temp-id]) body0 body ...)))))]))
-
-(define-syntax (for/seq stx)
-  (syntax-parse stx
-    [(for/seq (for-clause ...) body-or-break ... body)
-     #:with ((pre-body ...) (post-body ...))
-            (split-for-body this-syntax #'(body-or-break ... body))
-     #'(for/fold/derived this-syntax
-                         ([accum (void)])
-                         (for-clause ...)
-         pre-body ...
-         (seq accum (let () post-body ...)))]))
+;; (define result? (disjoin value? ⊥?))
+;; (call/seq (-> result? (-> value? result?) result?))
 
 (define (literal? stx)
   (abstract? (syntax->datum stx)))
