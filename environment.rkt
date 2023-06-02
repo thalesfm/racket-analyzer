@@ -5,23 +5,30 @@
  (contract-out
   [make-empty-environment (-> environment?)]
   [make-base-environment (-> environment?)]
-  [bind (-> environment? (or/c symbol? syntax?) any/c void)]
-  [rebind! (-> environment? (or/c symbol? syntax?) any/c void)]
-  [lookup (-> environment? (or/c symbol? syntax?) any/c)]
+  [bind (-> environment? identifier? any/c environment?)]
+  [bind* (-> environment? stx-list? list? environment?)]
+  [bind! (-> environment? identifier? any/c void?)]
+  [create-location (-> environment? identifier? environment?)]
+  [create-locations (-> environment? stx-list? environment?)]
+  [lookup (-> environment? identifier? any/c)]
 ))
 
-(require "domain.rkt" "lift.rkt")
+(require syntax/stx
+         "domain.rkt"
+         "lift.rkt")
 
-(struct environment (assoc-lst) #:constructor-name make-environment)
-
-(define (->symbol v)
-  (cond
-    [(symbol? v) v]
-    [(syntax? v) (syntax->datum v)]
-    [else (raise-argument-error 'v "(or/c symbol? syntax?)" v)]))
+;; TODO: Make module implementation independent on the domain definition
+;; TODO: Move `make-base-environment` somewhere more appropriate
 
 (define (massoc v lst [is-equal? equal?])
-  (findf (lambda (p) (is-equal? (mcar p) v)) lst))
+  (findf (λ (p) (is-equal? (mcar p) v)) lst))
+
+(struct environment (assoc-list)
+        #:mutable
+        #:constructor-name make-environment)
+
+(define (make-entry id v)
+  (mcons (syntax->datum id) v))
 
 (define (make-empty-environment)
   (make-environment null))
@@ -38,17 +45,33 @@
     ))
   (make-environment base-assoc-list))
 
-(define (bind env sym value)
-  (define assoc-lst (environment-assoc-lst env))
-  (define pair (mcons (->symbol sym) value))
-  (make-environment (cons pair assoc-lst)))
+(define (bind env id v)
+  (define lst (environment-assoc-list env))
+  (define entry (make-entry id v))
+  (make-environment (cons entry lst)))
 
-(define (rebind! env sym value)
-  (define assoc-lst (environment-assoc-lst env))
-  (define pair (massoc (->symbol sym) assoc-lst))
-  (set-mcdr! pair value))
+(define (bind! env id v)
+  (define lst (environment-assoc-list env))
+  (define entry (massoc (syntax->datum id) lst))
+  (if entry
+      (set-mcdr! entry v)
+      (set-environment-assoc-list! (cons (make-entry id v) lst))))
 
-(define (lookup env sym)
-  (define assoc-lst (environment-assoc-lst env))
-  (define pair (massoc (->symbol sym) assoc-lst))
-  (mcdr pair))
+(define (bind* env id-list v-list)
+  (for/fold ([env env])
+            ([id (in-syntax id-list)]
+             [v (in-list v-list)])
+    (bind env id v)))
+
+(define (create-location env id)
+  (bind env id Nothing))
+
+(define (create-locations env id-list)
+  (for/fold ([env env])
+            ([id (in-syntax id-list)])
+    (create-location env id)))
+
+(define (lookup env id)
+  (define lst (environment-assoc-list env))
+  (define entry (massoc (syntax->datum id) lst))
+  (if entry (mcdr entry) Nothing))

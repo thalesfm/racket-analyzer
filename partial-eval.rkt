@@ -45,17 +45,6 @@
 (define (partial-eval expr)
   (partial-eval-syntax (datum->syntax #f expr) (make-base-environment)))
 
-(define (bind-multiple env id-list vs)
-  (for/fold ([env env])
-            ([id (in-syntax id-list)]
-             [v (in-list vs)])
-    (bind env id v)))
-
-(define (create-locations env id-list)
-  (for/fold ([env env])
-            ([id (in-syntax id-list)])
-    (bind env id Nothing)))
-
 ;; FIXME: Avoid using ~datum in patterns if possible
 (define (partial-eval-syntax stx env)
   (syntax-parse stx
@@ -83,14 +72,14 @@
 
     [((~datum let) ~! ([id:id expr:expr] ...) body)
      (let/seq ([vs (partial-eval-syntaxes #'(expr ...) env)])
-       (partial-eval-syntax #'body (bind-multiple env #'(id ...) vs)))]
+       (partial-eval-syntax #'body (bind* env #'(id ...) vs)))]
 
     [((~datum letrec) ~! ([id:id expr:expr] ...) body)
      (let ([new-env (create-locations env #'(id ...))])
        (seq (for/seq ([id (in-syntax #'(id ...))]
                       [expr (in-syntax #'(expr ...))])
               (let/seq ([v (partial-eval-syntax expr new-env)])
-                (rebind! new-env id v)))
+                (bind! new-env id v)))
             (partial-eval-syntax #'body new-env)))]
 
     [(proc-expr:expr arg-expr:expr ...)
@@ -111,6 +100,6 @@
     [(closure? proc)
      (partial-eval-syntax
       (closure-body proc)
-      (bind-multiple (closure-environment proc)
-                     (closure-arg-id-list proc)
-                     args))]))
+      (bind* (closure-environment proc)
+             (closure-arg-id-list proc)
+             args))]))

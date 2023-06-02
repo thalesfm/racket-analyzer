@@ -49,3 +49,7 @@
 (check-eq? (partial-eval '((error) 'unused)) Nothing)
 (check-eq? (partial-eval '(+ (error) 10)) Nothing)
 (check-eq? (partial-eval '(+ 10 (error))) Nothing)
+
+(check-eq? (partial-eval 'x) Nothing)
+(check-eq? (partial-eval '(let ([x 10]) y)) Nothing)
+(check-eq? (partial-eval '(if (read) 10 x)) 10)
