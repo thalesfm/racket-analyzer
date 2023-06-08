@@ -1,6 +1,8 @@
 #lang racket
 
-(require rackunit "domain.rkt")
+(require rackunit
+         "base.rkt"
+         "defs.rkt")
 
 (test-case
   "Partial order tests"

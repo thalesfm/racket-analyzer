@@ -1,6 +1,6 @@
 #lang racket
 
-(require "domain.rkt")
+(require "types.rkt")
 
 (provide lift)
 

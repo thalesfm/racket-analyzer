@@ -14,8 +14,8 @@
 ))
 
 (require syntax/stx
-         "domain.rkt"
-         "lift.rkt")
+         "lift.rkt"
+         "types.rkt")
 
 ;; TODO: Make module implementation independent on the domain definition
 ;; TODO: Move `make-base-environment` somewhere more appropriate

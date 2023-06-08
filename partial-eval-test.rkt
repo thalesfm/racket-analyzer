@@ -1,6 +1,8 @@
 #lang racket
 
-(require rackunit "domain.rkt" "partial-eval.rkt")
+(require rackunit
+         "partial-eval.rkt"
+         "types.rkt")
 
 (check-equal? (partial-eval 10) 10)
 (check-equal? (partial-eval '(let ([x 10]) x)) 10)

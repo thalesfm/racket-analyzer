@@ -9,7 +9,7 @@
          (for-syntax racket/syntax
                      syntax/for-body
                      syntax/parse)
-         "domain.rkt")
+         "types.rkt")
 
 (define-syntax-parser seq
   [(_ expr:expr ... final-expr:expr)

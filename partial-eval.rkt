@@ -4,8 +4,8 @@
 
 (require syntax/parse
          "environment.rkt"
-         "domain.rkt"
-         "seq.rkt")
+         "seq.rkt"
+         "types.rkt")
 
 (struct closure (arg-id-list body environment))
 
