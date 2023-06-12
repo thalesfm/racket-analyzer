@@ -1,8 +1,7 @@
 #lang racket
 
 (require rackunit
-         "base.rkt"
-         "defs.rkt")
+         "types.rkt")
 
 (test-case
   "Partial order tests"
