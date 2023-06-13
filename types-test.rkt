@@ -64,8 +64,10 @@
   (check-equal? (lub Bot Bot) Bot)
 
   ;; Checks for pairs
-  #;(check-equal? (lub #t (cons 1 2)) Truthy)
-  #;(check-equal? (lub #f (cons 1 2)) Top)
+  (check-equal? (lub (Pairof 1 2) (Pairof 1 #f)) (Pairof 1 Top))
+  (check-equal? (lub (Pairof 1 2) (Pairof #f 2)) (Pairof Top 2))
+  (check-equal? (lub #t (Pairof 1 2)) Truthy)
+  (check-equal? (lub #f (Pairof 1 2)) Top)
 
   ;; (check-eq? (type<=? Bot (lub Bot (random-value)) #t)
   ;; (check-eq? (type<=? (lub Bot (random-value)) Bot) #f)

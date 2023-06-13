@@ -8,55 +8,20 @@
          (type-out Rational)
          (type-out Integer)
          (type-out Exact-Nonnegative-Integer)
-         (contract-out [type? (-> any/c boolean?)]
-                       [literal? (-> type? boolean?)]
-                       [type<=? (-> type? type? boolean?)]
-                       [lub (-> type? type? type?)]))
+         (type-out Pairof))
 
-(require racket/provide-syntax
-         syntax/parse/define
-         (for-syntax racket/syntax))
+(provide
+ (contract-out
+  [literal?    (-> type? boolean?)]
+  [type?       (-> any/c boolean?)]
+  [datum->type (-> any/c type?)]
+  [type->datum (-> type? any/c)]
+  [type<=?     (-> type? type? boolean?)]
+  [lub         (-> type? type? type?)]
+  [rename datum->type α (-> any/c type?)]
+  [rename type->datum γ (-> type? any/c)]))
 
-(struct base-type (name) #:transparent)
-(struct type-ctor (name args) #:transparent)
-
-(define-for-syntax (format-pred-id id)
-  (format-id id "~a?" (syntax-e id)))
-
-(define-for-syntax (stx-length=? stx n)
-  (eq? (length (syntax->list stx)) n))
-
-(define-syntax-parser define-base-type
-  [(_ type:id)
-   #:with pred (format-pred-id #'type)
-   #'(begin
-       (define type (base-type 'type))
-       (define (pred v) (eq? v type)))])
-
-(define-syntax-parser define-type-constructor
-  [(_ ctor:id #:arity arity:exact-positive-integer)
-   #:with pred (format-pred-id #'ctor)
-   #'(begin
-       (define-match-expander ctor
-         (syntax-parser
-           [(_ pat:expr (... ...))
-            #:fail-when (not (stx-length=? #'(pat (... ...)) arity))
-                        "arity mismatch"
-            #'(type-ctor 'ctor (list pat (... ...)))])
-         (syntax-parser
-           [(_ arg:expr (... ...))
-            #:fail-when (not (stx-length=? #'(arg (... ...)) arity))
-                        "arity mismatch"
-            #'(type-ctor 'ctor (list arg (... ...)))]))
-       (define (pred v)
-         (and (type-ctor? v)
-              (eq? (type-ctor-name v) 'id))))])
-
-(define-provide-syntax type-out
-  (syntax-parser
-    [(_ type)
-     #:with pred (format-pred-id #'type)
-     #'(combine-out type pred)]))
+(require "types-base.rkt")
 
 (define-base-type Top)
 (define-base-type Bot)
@@ -72,22 +37,31 @@
 ;; TODO: Check that arguments are type? when invoked
 (define-type-constructor Pairof #:arity 2)
 
-;; TODO: Define abstraction function (datum->type)
-#;(define (α v) ...)
-
-;; TODO: Define "concretization" function (type->datum)
-#;(define (γ τ) ...)
-
-;; WARN: Does not consider pairs to be literals!!!
 (define (literal? v)
   (or (boolean? v) (number? v)))
 
 (define (type? v)
   (or (base-type? v) (type-ctor? v) (literal? v)))
 
+(define/match (datum->type v)
+  [(v) #:when (literal? v) v]
+  [((cons a d))
+   (Pairof (datum->type a)
+           (datum->type d))]
+  [(v)
+   (raise-arguments-error 'datum->type "unsuported datum" "v" v)])
+
+(define/match (type->datum t)
+  [(t) #:when (literal? t) t]
+  [((Pairof a d))
+   (cons (type->datum a)
+         (type->datum d))]
+  [(t)
+   (raise-arguments-error 'type->datum "type can't be concretized" "τ" t)])
+
 ;; Returns the supertype of `t` when one exists,
-;; returns false when there are none/multiple
-(define/match (super _t)
+;; returns false when none (or multiple) exist
+(define/match (super t)
   [(#f) Top]
   [(#t) Truthy]
 
@@ -106,7 +80,7 @@
 
   [(_) #f])
 
-(define/match (type<=? _t1 _t2)
+(define/match (type<=? t1 t2)
   [(_        (== Top)) #t]
   [((== Bot) _       ) #t]
 
@@ -122,7 +96,7 @@
    (let ([sup (super t1)])
      (if  sup (type<=? sup t2) #f))])
 
-(define/match (lub _t1 _t2)
+(define/match (lub t1 t2)
   [((== Top) _       ) Top]
   [(_        (== Top)) Top]
   [((== Bot) t       ) t]
