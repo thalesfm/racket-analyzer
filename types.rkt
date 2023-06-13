@@ -14,42 +14,60 @@
                        [lub (-> abstract? abstract? abstract?)]))
 
 (require racket/provide-syntax
-         (for-syntax racket/syntax syntax/parse))
+         racket/struct
+         syntax/parse/define
+         (for-syntax racket/syntax))
 
-(struct type (ctor-id args)
-        #:transparent)
+(struct base-type (name) #:transparent)
+(struct type-ctor (name args) #:transparent)
 
 (define-for-syntax (format-pred-id id)
   (format-id id "~a?" (syntax-e id)))
 
-(define-syntax define-type
-  (syntax-parser
-    [(_ id:id)
-     #:with id? (format-pred-id #'id)
-     #'(begin
-         (define id (type 'id null))
-         (define (id? v) (and (type? v) (eq? (type-ctor-id v) 'id))))]
-    [(_ (id:id arg-id:id ...))
-     #:with id? (format-pred-id #'id)
-     #'(begin
-         (define (id arg-id ...) (type 'id (list arg-id ...)))
-         (define (id? v) (and (type? v) (eq? (type-ctor-id v) 'id))))]))
+(define-for-syntax (stx-list-length=? stx n)
+  (eq? (length (syntax->list stx)) n))
+
+(define-syntax-parser define-base-type
+  [(_ type:id)
+   #:with pred (format-pred-id #'type)
+   #'(begin
+       (define type (base-type 'type))
+       (define (pred v) (eq? v type)))])
+
+(define-syntax-parser define-type-constructor
+  [(_ ctor:id #:arity arity:exact-positive-integer)
+   #:with pred (format-pred-id #'ctor)
+   #'(begin
+       (define-match-expander ctor
+         (syntax-parser
+           [(_ pat:expr (... ...))
+            #:fail-when (not (stx-list-length=? #'(pat (... ...)) arity))
+                        "arity mismatch"
+            #'(type-ctor 'ctor (list pat (... ...)))])
+         (syntax-parser
+           [(_ arg:expr (... ...))
+            #:fail-when (not (stx-list-length=? #'(arg (... ...)) arity))
+                        "arity mismatch"
+            #'(type-ctor 'ctor (list arg (... ...)))]))
+       (define (pred v)
+         (and (type-ctor? v)
+              (eq? (type-ctor-name v) 'id))))])
 
 (define-provide-syntax type-out
   (syntax-parser
-    [(_ type-id)
-     #:with type-id? (format-pred-id #'type-id)
-     #'(combine-out type-id type-id?)]))
+    [(_ type)
+     #:with pred (format-pred-id #'type)
+     #'(combine-out type pred)]))
 
-(define-type Any)
-(define-type True)
-(define-type Nothing)
+(define-base-type Any)
+(define-base-type True)
+(define-base-type Nothing)
 
-(define-type Number)
-(define-type Real)
-(define-type Rational)
-(define-type Integer)
-(define-type Exact-Nonnegative-Integer)
+(define-base-type Number)
+(define-base-type Real)
+(define-base-type Rational)
+(define-base-type Integer)
+(define-base-type Exact-Nonnegative-Integer)
 
 ;; Returns the supertype of `t` when one exists,
 ;; returns false when there are none/multiple
@@ -73,7 +91,8 @@
 (define (abstract? v)
   (cond [(boolean? v) #t]
         [(number? v) #t]
-        [(type? v) #t]
+        [(base-type? v) #t]
+        [(type-ctor? v) #t]
         [(cons? v) (and (abstract? (car v))
                         (abstract? (cdr v)))]
         [else #f]))
@@ -82,7 +101,8 @@
   (cond
     [(boolean? v) #t]
     [(number? v) #t]
-    [(type? v) #f]
+    [(base-type? v) #f]
+    [(type-ctor? v) #f]
     [(pair? v) (and (constant? (car v))
                     (constant? (cdr v)))]
     [else #f]))
@@ -95,9 +115,9 @@
      (and (<=? (car v1) (car v2))
           (<=? (cdr v1) (cdr v2)))]
     [(equal? v1 v2) #t]
-    [(or (not (type? v1)) (not (type? v2)))
-     (<=? (if (type? v1) v1 (supertype v1))
-          (if (type? v2) v2 (supertype v2)))]
+    [(or (not (base-type? v1)) (not (base-type? v2)))
+     (<=? (if (base-type? v1) v1 (supertype v1))
+          (if (base-type? v2) v2 (supertype v2)))]
     [(supertype v1) => (λ (super-v1) (<=? super-v1 v2))]
     [else #f]))
 
@@ -112,9 +132,9 @@
     [(or (pair? v1) (pair? v2))
      (if (and v1 v2) True Any)]
     [(equal? v1 v2) v1]
-    [(or (not (type? v1)) (not (type? v2)))
-     (lub (if (type? v1) v1 (supertype v1))
-          (if (type? v2) v2 (supertype v2)))]
+    [(or (not (base-type? v1)) (not (base-type? v2)))
+     (lub (if (base-type? v1) v1 (supertype v1))
+          (if (base-type? v2) v2 (supertype v2)))]
     [(<=? v1 v2) v2]
     [(<=? v2 v1) v1]
     [else
