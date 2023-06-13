@@ -8,7 +8,9 @@
          (type-out Rational)
          (type-out Integer)
          (type-out Exact-Nonnegative-Integer)
-         (type-out Pairof))
+         (type-out Null)
+         (type-out Pairof)
+         (type-out Listof))
 
 (provide
  (contract-out
@@ -35,7 +37,9 @@
 (define-base-type Exact-Nonnegative-Integer)
 
 ;; TODO: Check that arguments are type? when invoked
+(define-base-type Null)
 (define-type-constructor Pairof #:arity 2)
+(define-type-constructor Listof #:arity 1)
 
 (define (literal? v)
   (or (boolean? v) (number? v)))
@@ -45,6 +49,7 @@
 
 (define/match (datum->type v)
   [(v) #:when (literal? v) v]
+  [((? null?)) Null]
   [((cons a d))
    (Pairof (datum->type a)
            (datum->type d))]
@@ -53,6 +58,7 @@
 
 (define/match (type->datum t)
   [(t) #:when (literal? t) t]
+  [((== Null)) null]
   [((Pairof a d))
    (cons (type->datum a)
          (type->datum d))]
@@ -61,40 +67,53 @@
 
 ;; Returns the supertype of `t` when one exists,
 ;; returns false when none (or multiple) exist
-(define/match (super t)
-  [(#f) Top]
-  [(#t) Truthy]
+(define (super t)
+  (match t
+    [#f Top]
+    [#t Truthy]
 
-  [((? exact-nonnegative-integer?)) Exact-Nonnegative-Integer]
-  [((? integer?) ) Integer]
-  [((? rational?)) Rational]
-  [((? real?)    ) Real]
-  [((? number?)  ) Number]
+    [(? exact-nonnegative-integer?) Exact-Nonnegative-Integer]
+    [(? integer?)  Integer]
+    [(? rational?) Rational]
+    [(? real?)     Real]
+    [(? number?)   Number]
 
-  [((== Truthy)  ) Top]
-  [((== Number)  ) Truthy]
-  [((== Real)    ) Number]
-  [((== Rational)) Real]
-  [((== Integer) ) Rational]
-  [((== Exact-Nonnegative-Integer)) Integer]
+    [(== Truthy)   Top]
+    [(== Number)   Truthy]
+    [(== Real)     Number]
+    [(== Rational) Real]
+    [(== Integer)  Rational]
+    [(== Exact-Nonnegative-Integer) Integer]
 
-  [(_) #f])
+    [(== Null) (Listof Bot)]
+    [(Listof t) (=> next)
+     (let ([sup (super t)])
+       (if sup (Listof sup) (next)))]
+
+    [_ #f]))
+
+(define (type=? t1 t2) (equal? t1 t2))
 
 (define/match (type<=? t1 t2)
   [(_        (== Top)) #t]
   [((== Bot) _       ) #t]
 
-  [((Pairof a1 d1) (Pairof a2 d2))
-    (and (type<=? a1 a2)
-         (type<=? d1 d2))]
+  [((== Null)      (Listof _ )   ) #t]
+  [((Listof t1)    (Listof t2)   ) (type<=? t1 t2)]
+  [((Pairof a  d ) (Listof t )   ) (and (type<=? a t)
+                                        (type<=? d (Listof t)))]
+  [((Pairof a1 d1) (Pairof a2 d2)) (and (type<=? a1 a2)
+                                        (type<=? d1 d2))]
 
-  [(t1 t2) #:when (equal? t1 t2) #t]
+  [(t1 t2) #:when (type=? t1 t2) #t]
   [(t1 t2) #:when (or (literal? t1) (literal? t2))
    (type<=? (if (literal? t1) (super t1) t1)
             (if (literal? t2) (super t2) t2))]
-  [(t1 t2)
+  [(t1 t2) (=> next)
    (let ([sup (super t1)])
-     (if  sup (type<=? sup t2) #f))])
+     (if sup (type<=? sup t2) (next)))]
+
+  [(_  _ ) #f])
 
 (define/match (lub t1 t2)
   [((== Top) _       ) Top]
@@ -102,11 +121,24 @@
   [((== Bot) t       ) t]
   [(t        (== Bot)) t]
 
+  [((Listof t1)    (Listof t2)   ) (Listof (lub t1 t2))]
   [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (lub a1 a2) (lub d1 d2))]
+  [((Pairof a  d ) (== Null)     ) (lub (Pairof a d) (Listof Bot))]
+  [((== Null)      (Pairof a  d )) (lub (Pairof a d) (Listof Bot))]
+  [((Pairof a  d ) (Listof t )   )
+   (match (lub d (Listof t))
+     [(Listof t*) (Listof (lub a t*))]
+     [_           Truthy])]
+  [((Listof t )    (Pairof a  d ))
+   (match (lub d (Listof t))
+     [(Listof t*) (Listof (lub a t*))]
+     [_           Truthy])]
+
+  ;; These cases are reduntant but avoid expensive `type<=?` comparisons
   [((Pairof _  _ ) t             ) (if t Truthy Top)]
   [(t              (Pairof _  _ )) (if t Truthy Top)]
 
-  [(t1 t2) #:when (equal? t1 t2)  t1]
+  [(t1 t2) #:when (equal?  t1 t2) t1]
   [(t1 t2) #:when (or (literal? t1) (literal? t2))
    (lub (if (literal? t1) (super t1) t1)
         (if (literal? t2) (super t2) t2))]
