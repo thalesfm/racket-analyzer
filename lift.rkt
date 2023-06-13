@@ -6,7 +6,7 @@
 
 (define (lift proc)
   (lambda args
-    (if (andmap constant? args) (apply proc args) Any)))
+    (if (andmap constant? args) (apply proc args) Top)))
 
 #|
 (define-syntax lift/contract

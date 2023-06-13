@@ -1,20 +1,19 @@
 #lang racket
 
-(provide (type-out Any)
-         (type-out True)
-         (type-out Nothing)
+(provide (type-out Top)
+         (type-out Bot)
+         (type-out Truthy)
          (type-out Number)
          (type-out Real)
          (type-out Rational)
          (type-out Integer)
          (type-out Exact-Nonnegative-Integer)
-         (contract-out [abstract? (-> any/c boolean?)]
-                       [constant? (-> abstract? boolean?)]
-                       [<=? (-> abstract? abstract? boolean?)]
-                       [lub (-> abstract? abstract? abstract?)]))
+         (contract-out [type? (-> any/c boolean?)]
+                       [literal? (-> type? boolean?)]
+                       [type<=? (-> type? type? boolean?)]
+                       [lub (-> type? type? type?)]))
 
 (require racket/provide-syntax
-         racket/struct
          syntax/parse/define
          (for-syntax racket/syntax))
 
@@ -24,7 +23,7 @@
 (define-for-syntax (format-pred-id id)
   (format-id id "~a?" (syntax-e id)))
 
-(define-for-syntax (stx-list-length=? stx n)
+(define-for-syntax (stx-length=? stx n)
   (eq? (length (syntax->list stx)) n))
 
 (define-syntax-parser define-base-type
@@ -41,12 +40,12 @@
        (define-match-expander ctor
          (syntax-parser
            [(_ pat:expr (... ...))
-            #:fail-when (not (stx-list-length=? #'(pat (... ...)) arity))
+            #:fail-when (not (stx-length=? #'(pat (... ...)) arity))
                         "arity mismatch"
             #'(type-ctor 'ctor (list pat (... ...)))])
          (syntax-parser
            [(_ arg:expr (... ...))
-            #:fail-when (not (stx-list-length=? #'(arg (... ...)) arity))
+            #:fail-when (not (stx-length=? #'(arg (... ...)) arity))
                         "arity mismatch"
             #'(type-ctor 'ctor (list arg (... ...)))]))
        (define (pred v)
@@ -59,9 +58,10 @@
      #:with pred (format-pred-id #'type)
      #'(combine-out type pred)]))
 
-(define-base-type Any)
-(define-base-type True)
-(define-base-type Nothing)
+(define-base-type Top)
+(define-base-type Bot)
+
+(define-base-type Truthy)
 
 (define-base-type Number)
 (define-base-type Real)
@@ -69,73 +69,73 @@
 (define-base-type Integer)
 (define-base-type Exact-Nonnegative-Integer)
 
+;; TODO: Check that arguments are type? when invoked
+(define-type-constructor Pairof #:arity 2)
+
+;; TODO: Define abstraction function (datum->type)
+#;(define (α v) ...)
+
+;; TODO: Define "concretization" function (type->datum)
+#;(define (γ τ) ...)
+
+;; WARN: Does not consider pairs to be literals!!!
+(define (literal? v)
+  (or (boolean? v) (number? v)))
+
+(define (type? v)
+  (or (base-type? v) (type-ctor? v) (literal? v)))
+
 ;; Returns the supertype of `t` when one exists,
 ;; returns false when there are none/multiple
-(define (supertype t)
-  (cond
-    [(eq? t #f) Any]
-    [(eq? t #t) True]
-    [(exact-nonnegative-integer? t) Exact-Nonnegative-Integer]
-    [(integer? t) Integer]
-    [(rational? t) Rational]
-    [(real? t) Real]
-    [(number? t) Number]
-    [(True? t) Any]
-    [(Number? t) True]
-    [(Real? t) Number]
-    [(Rational? t) Real]
-    [(Integer? t) Rational]
-    [(Exact-Nonnegative-Integer? t) Integer]
-    [else #f]))
+(define/match (super _t)
+  [(#f) Top]
+  [(#t) Truthy]
 
-(define (abstract? v)
-  (cond [(boolean? v) #t]
-        [(number? v) #t]
-        [(base-type? v) #t]
-        [(type-ctor? v) #t]
-        [(cons? v) (and (abstract? (car v))
-                        (abstract? (cdr v)))]
-        [else #f]))
+  [((? exact-nonnegative-integer?)) Exact-Nonnegative-Integer]
+  [((? integer?) ) Integer]
+  [((? rational?)) Rational]
+  [((? real?)    ) Real]
+  [((? number?)  ) Number]
 
-(define (constant? v)
-  (cond
-    [(boolean? v) #t]
-    [(number? v) #t]
-    [(base-type? v) #f]
-    [(type-ctor? v) #f]
-    [(pair? v) (and (constant? (car v))
-                    (constant? (cdr v)))]
-    [else #f]))
+  [((== Truthy)  ) Top]
+  [((== Number)  ) Truthy]
+  [((== Real)    ) Number]
+  [((== Rational)) Real]
+  [((== Integer) ) Rational]
+  [((== Exact-Nonnegative-Integer)) Integer]
 
-(define (<=? v1 v2)
-  (cond
-    [(equal? v2 Any) #t]
-    [(equal? v1 Nothing) #t]
-    [(and (pair? v1) (pair? v2))
-     (and (<=? (car v1) (car v2))
-          (<=? (cdr v1) (cdr v2)))]
-    [(equal? v1 v2) #t]
-    [(or (not (base-type? v1)) (not (base-type? v2)))
-     (<=? (if (base-type? v1) v1 (supertype v1))
-          (if (base-type? v2) v2 (supertype v2)))]
-    [(supertype v1) => (λ (super-v1) (<=? super-v1 v2))]
-    [else #f]))
+  [(_) #f])
 
-(define (lub v1 v2)
-  (cond
-    [(or (equal? v1 Any) (equal? v2 Any)) Any]
-    [(equal? v1 Nothing) v2]
-    [(equal? v2 Nothing) v1]
-    [(and (pair? v1) (pair? v2))
-     (cons (lub (car v1) (car v2))
-           (lub (cdr v1) (cdr v2)))]
-    [(or (pair? v1) (pair? v2))
-     (if (and v1 v2) True Any)]
-    [(equal? v1 v2) v1]
-    [(or (not (base-type? v1)) (not (base-type? v2)))
-     (lub (if (base-type? v1) v1 (supertype v1))
-          (if (base-type? v2) v2 (supertype v2)))]
-    [(<=? v1 v2) v2]
-    [(<=? v2 v1) v1]
-    [else
-     (if (and v1 v2) True Any)]))
+(define/match (type<=? _t1 _t2)
+  [(_        (== Top)) #t]
+  [((== Bot) _       ) #t]
+
+  [((Pairof a1 d1) (Pairof a2 d2))
+    (and (type<=? a1 a2)
+         (type<=? d1 d2))]
+
+  [(t1 t2) #:when (equal? t1 t2) #t]
+  [(t1 t2) #:when (or (literal? t1) (literal? t2))
+   (type<=? (if (literal? t1) (super t1) t1)
+            (if (literal? t2) (super t2) t2))]
+  [(t1 t2)
+   (let ([sup (super t1)])
+     (if  sup (type<=? sup t2) #f))])
+
+(define/match (lub _t1 _t2)
+  [((== Top) _       ) Top]
+  [(_        (== Top)) Top]
+  [((== Bot) t       ) t]
+  [(t        (== Bot)) t]
+
+  [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (lub a1 a2) (lub d1 d2))]
+  [((Pairof _  _ ) t             ) (if t Truthy Top)]
+  [(t              (Pairof _  _ )) (if t Truthy Top)]
+
+  [(t1 t2) #:when (equal? t1 t2)  t1]
+  [(t1 t2) #:when (or (literal? t1) (literal? t2))
+   (lub (if (literal? t1) (super t1) t1)
+        (if (literal? t2) (super t2) t2))]
+  [(t1 t2) #:when (type<=? t1 t2) t2]
+  [(t1 t2) #:when (type<=? t2 t1) t1]
+  [(t1 t2) (if (and t1 t2) Truthy Top)])
