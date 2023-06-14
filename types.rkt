@@ -3,6 +3,10 @@
 (provide (type-out Top)
          (type-out Bot)
          (type-out Truthy)
+         (type-out Char)
+         (type-out String)
+         (type-out Symbol)
+         (type-out Void)
          (type-out Number)
          (type-out Real)
          (type-out Rational)
@@ -30,25 +34,35 @@
 
 (define-base-type Truthy)
 
+;; No boolean datatype because we have `Truthy`
+(define-base-type Char)
+(define-base-type String)
+(define-base-type Symbol)
+(define-base-type Void)
+;; Ommited built-in datatypes: bytes, byte strings, keywords, vectors,
+;; hash tables, boxes, and undefined (as well as user defined structs)
+
 (define-base-type Number)
 (define-base-type Real)
 (define-base-type Rational)
 (define-base-type Integer)
 (define-base-type Exact-Nonnegative-Integer)
 
-;; TODO: Check that arguments are type? when invoked
+;; TODO: Check that arguments are `type?` when invoked
 (define-base-type Null)
 (define-type-constructor Pairof #:arity 2)
 (define-type-constructor Listof #:arity 1)
+;; (define-type List (Listof Top))
 
-(define (literal? v)
-  (or (boolean? v) (number? v)))
+(define literal?
+  (disjoin boolean? number? char? string? symbol?))
 
 (define (type? v)
   (or (base-type? v) (type-ctor? v) (literal? v)))
 
 (define/match (datum->type v)
   [(v) #:when (literal? v) v]
+  [((? void?)) Void]
   [((? null?)) Null]
   [((cons a d))
    (Pairof (datum->type a)
@@ -58,6 +72,7 @@
 
 (define/match (type->datum t)
   [(t) #:when (literal? t) t]
+  [((== Void)) (void)]
   [((== Null)) null]
   [((Pairof a d))
    (cons (type->datum a)
@@ -72,11 +87,21 @@
     [#f Top]
     [#t Truthy]
 
+    [(? char?)     Char]
+    [(? string?)   String]
+    [(? symbol?)   Symbol]
+    [(? void?)     Void]
+
     [(? exact-nonnegative-integer?) Exact-Nonnegative-Integer]
     [(? integer?)  Integer]
     [(? rational?) Rational]
     [(? real?)     Real]
     [(? number?)   Number]
+
+    [(== Char)     Truthy]
+    [(== String)   Truthy]
+    [(== Symbol)   Truthy]
+    [(== Void)     Truthy]
 
     [(== Truthy)   Top]
     [(== Number)   Truthy]
@@ -106,6 +131,7 @@
                                         (type<=? d1 d2))]
 
   [(t1 t2) #:when (type=? t1 t2) #t]
+  ;; TODO: Check if this still makes sense
   [(t1 t2) #:when (or (literal? t1) (literal? t2))
    (type<=? (if (literal? t1) (super t1) t1)
             (if (literal? t2) (super t2) t2))]

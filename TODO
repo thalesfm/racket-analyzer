@@ -1,8 +1,6 @@
+- Add more primitive procedures
 - Add error information to bottom values
-- Implement more tests for "domain.rkt"
+- Add contract checks to lifted procedures
+- Implement monomorphic analysis (w/ fixpoint iteration, etc.)
 - Better organize all tests
-- Refactor abstract value representation as a product of multiple domains (?)
-- Add support for other data types (e.g.: chars, strings, symbols, etc.)
-- Implement monomorphic analysis for recursive procedures (w/ fixpoint iteration, etc.)
-- Implement code generation
 - Check performance impact of using contracts (especially `abstract?`)

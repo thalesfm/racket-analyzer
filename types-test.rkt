@@ -33,6 +33,11 @@
 (check-eq? (type<=? Number Truthy) #t)
 (check-eq? (type<=? #f Truthy) #f)
 
+;; Checks for `Char`, `String` and `Symbol`
+(check-eq? (type<=? #\h Char) #t)
+(check-eq? (type<=? "hello" String) #t)
+(check-eq? (type<=? 'h Symbol) #t)
+
 ;; Checks for `Number`, `Real`, `Integer`, etc.
 (check-descending (list Number Real Rational Integer Exact-Nonnegative-Integer))
 
@@ -80,6 +85,14 @@
 
 (check-equal? (lub 10 #t) Truthy)
 (check-equal? (lub 10 #f) Top)
+
+;; Checks for `Char`, `String` and `Symbol`
+(check-equal? (lub #\a #\a) #\a)
+(check-equal? (lub #\a #\b) Char)
+(check-equal? (lub "hello" "hello") "hello")
+(check-equal? (lub "hello" "hi") String)
+(check-equal? (lub 'a 'a) 'a)
+(check-equal? (lub 'a 'b) Symbol)
 
 ;; Checks for pairs and lists
 (check-equal? (lub (Pairof 1 2) (Pairof 1 #f)) (Pairof 1 Top))
