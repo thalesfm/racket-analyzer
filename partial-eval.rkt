@@ -13,7 +13,8 @@
 ;; (call/seq (-> result? (-> value? result?) result?))
 
 (define (literal? stx)
-  (abstract? (syntax->datum stx)))
+  (let ([v (syntax-e stx)])
+    (and (type? v) (literal-type? v))))
 
 (define (partial-eval expr)
   (partial-eval-syntax (datum->syntax #f expr) (make-base-environment)))
@@ -38,9 +39,9 @@
     [((~datum if) ~! test:expr then:expr else:expr)
      (let/seq ([test-v (partial-eval-syntax #'test env)])
        (cond
-         [(<=? test-v True) (partial-eval-syntax #'then env)]
+         [(type<=? test-v Truthy) (partial-eval-syntax #'then env)]
          [(eq? test-v #f) (partial-eval-syntax #'else env)]
-         [(eq? test-v Any) (lub (partial-eval-syntax #'then env)
+         [(eq? test-v Top) (lub (partial-eval-syntax #'then env)
                                 (partial-eval-syntax #'else env))]))]
 
     [((~datum let) ~! ([id:id expr:expr] ...) body)

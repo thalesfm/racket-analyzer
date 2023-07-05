@@ -18,12 +18,12 @@
 
 (provide
  (contract-out
-  [literal?    (-> type? boolean?)]
-  [type?       (-> any/c boolean?)]
-  [datum->type (-> any/c type?)]
-  [type->datum (-> type? any/c)]
-  [type<=?     (-> type? type? boolean?)]
-  [lub         (-> type? type? type?)]
+  [literal-type? (-> type? boolean?)]
+  [type?         (-> any/c boolean?)]
+  [datum->type   (-> any/c type?)]
+  [type->datum   (-> type? any/c)]
+  [type<=?       (-> type? type? boolean?)]
+  [lub           (-> type? type? type?)]
   [rename datum->type α (-> any/c type?)]
   [rename type->datum γ (-> type? any/c)]))
 
@@ -54,14 +54,14 @@
 (define-type-constructor Listof #:arity 1)
 ;; (define-type List (Listof Top))
 
-(define literal?
+(define literal-type?
   (disjoin boolean? number? char? string? symbol?))
 
 (define (type? v)
-  (or (base-type? v) (type-ctor? v) (literal? v)))
+  (or (base-type? v) (type-ctor? v) (literal-type? v)))
 
 (define/match (datum->type v)
-  [(v) #:when (literal? v) v]
+  [(v) #:when (literal-type? v) v]
   [((? void?)) Void]
   [((? null?)) Null]
   [((cons a d))
@@ -71,7 +71,7 @@
    (raise-arguments-error 'datum->type "unsuported datum" "v" v)])
 
 (define/match (type->datum t)
-  [(t) #:when (literal? t) t]
+  [(t) #:when (literal-type? t) t]
   [((== Void)) (void)]
   [((== Null)) null]
   [((Pairof a d))
@@ -132,9 +132,9 @@
 
   [(t1 t2) #:when (type=? t1 t2) #t]
   ;; TODO: Check if this still makes sense
-  [(t1 t2) #:when (or (literal? t1) (literal? t2))
-   (type<=? (if (literal? t1) (super t1) t1)
-            (if (literal? t2) (super t2) t2))]
+  [(t1 t2) #:when (or (literal-type? t1) (literal-type? t2))
+   (type<=? (if (literal-type? t1) (super t1) t1)
+            (if (literal-type? t2) (super t2) t2))]
   [(t1 t2) (=> next)
    (let ([sup (super t1)])
      (if sup (type<=? sup t2) (next)))]
@@ -165,9 +165,9 @@
   [(t              (Pairof _  _ )) (if t Truthy Top)]
 
   [(t1 t2) #:when (equal?  t1 t2) t1]
-  [(t1 t2) #:when (or (literal? t1) (literal? t2))
-   (lub (if (literal? t1) (super t1) t1)
-        (if (literal? t2) (super t2) t2))]
+  [(t1 t2) #:when (or (literal-type? t1) (literal-type? t2))
+   (lub (if (literal-type? t1) (super t1) t1)
+        (if (literal-type? t2) (super t2) t2))]
   [(t1 t2) #:when (type<=? t1 t2) t2]
   [(t1 t2) #:when (type<=? t2 t1) t1]
   [(t1 t2) (if (and t1 t2) Truthy Top)])

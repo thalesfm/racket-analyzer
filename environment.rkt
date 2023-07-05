@@ -41,8 +41,8 @@
          [Γ (bind Γ #'* (lift *))]
          [Γ (bind Γ #'/ (lift /))]
          [Γ (bind Γ #'= (lift =))]
-         [Γ (bind Γ #'read (λ () Any))]
-         [Γ (bind Γ #'error (λ () Nothing))])
+         [Γ (bind Γ #'read (λ () Top))]
+         [Γ (bind Γ #'error (λ () Bot))])
     Γ))
 
 (define (bind env id v)
@@ -64,7 +64,7 @@
     (bind env id v)))
 
 (define (fresh env id)
-  (bind env id Nothing))
+  (bind env id Bot))
 
 (define (fresh* env id-list)
   (for/fold ([env env])
@@ -74,4 +74,4 @@
 (define (lookup env id)
   (define lst (environment-assoc-list env))
   (define entry (massoc (syntax->datum id) lst))
-  (if entry (mcdr entry) Nothing))
+  (if entry (mcdr entry) Bot))

@@ -13,7 +13,7 @@
 
 (define-syntax-parser seq
   [(_ expr:expr ... final-expr:expr)
-    #'(if (or (Nothing? expr) ...) Nothing final-expr)])
+    #'(if (or (Bot? expr) ...) Bot final-expr)])
 
 (define-syntax-parser let/seq
   [(_ () body ...+) #'(let () body ...)]
@@ -35,6 +35,6 @@
     #'(for/fold/derived this-syntax
                         ([accum (void)])
                         (for-clause ...
-                         #:break (Nothing? accum))
+                         #:break (Bot? accum))
         pre-body ...
         (seq accum (let () post-body ...)))])
