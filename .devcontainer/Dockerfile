@@ -11,7 +11,7 @@ RUN groupadd -g $USER_GID $USERNAME &&\
     apt update &&\
     apt install -y ca-certificates git racket xvfb &&\
     chmod +x /usr/local/bin/xvfb-racket &&\
-	raco pkg install --auto --no-docs racket-langserver
+    raco pkg install -iD --auto racket-langserver
 
 USER racket
 
