@@ -10,6 +10,7 @@
   [fresh (-> environment? identifier? environment?)]
   [fresh* (-> environment? stx-list? environment?)]
   [lookup (-> environment? identifier? any/c)]
+  [environment-lub (-> environment? environment? environment?)]
 ))
 
 (require syntax/stx
@@ -60,3 +61,15 @@
   (define lst (environment-assoc-list env))
   (define entry (massoc (syntax->datum id) lst))
   (if entry (mcdr entry) Bot))
+
+(define (environment-lub env1 env2)
+  (define keys1
+    (for/set ([p (in-list (environment-assoc-list env1))])
+      (datum->syntax #f (mcar p))))
+  (define keys2
+    (for/set ([p (in-list (environment-assoc-list env2))])
+      (datum->syntax #f (mcar p))))
+  (define keys (set-union keys1 keys2))
+  (make-environment
+    (for/list ([k (in-set keys)])
+      (mcons (syntax->datum k) (lub (lookup env1 k) (lookup env2 k))))))
