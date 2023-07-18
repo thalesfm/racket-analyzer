@@ -4,7 +4,6 @@
  environment?
  (contract-out
   [make-empty-environment (-> environment?)]
-  [make-base-environment (-> environment?)]
   [bind (-> environment? identifier? any/c environment?)]
   [bind* (-> environment? stx-list? list? environment?)]
   [bind! (-> environment? identifier? any/c void?)]
@@ -14,11 +13,9 @@
 ))
 
 (require syntax/stx
-         "lift.rkt"
          "types.rkt")
 
 ;; TODO: Make module implementation independent on the domain definition
-;; TODO: Move `make-base-environment` somewhere more appropriate
 
 (define (massoc v lst [is-equal? equal?])
   (findf (λ (p) (is-equal? (mcar p) v)) lst))
@@ -32,18 +29,6 @@
 
 (define (make-empty-environment)
   (make-environment null))
-
-(define (make-base-environment)
-  (let* ([Γ (make-empty-environment)]
-         [Γ (bind Γ #'+ (lift +))]
-         [Γ (bind Γ #'+ (lift +))]
-         [Γ (bind Γ #'- (lift -))]
-         [Γ (bind Γ #'* (lift *))]
-         [Γ (bind Γ #'/ (lift /))]
-         [Γ (bind Γ #'= (lift =))]
-         [Γ (bind Γ #'read (λ () Top))]
-         [Γ (bind Γ #'error (λ () Bot))])
-    Γ))
 
 (define (bind env id v)
   (define lst (environment-assoc-list env))

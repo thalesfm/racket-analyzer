@@ -4,6 +4,7 @@
 
 (require syntax/parse
          "environment.rkt"
+         "primops.rkt"
          "seq.rkt"
          "types.rkt")
 
