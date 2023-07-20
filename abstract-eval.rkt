@@ -31,7 +31,7 @@
      #:when (literal? #'datum)
      (syntax->datum #'datum)]
 
-    [((~datum quote) datum)
+    [((~datum quote) ~! datum)
      (syntax->datum #'datum)]
 
     [((~datum lambda) ~! (id:id ...) body)
@@ -45,19 +45,30 @@
          [(eq? test-v Top) (lub (abstract-eval-syntax #'then env)
                                 (abstract-eval-syntax #'else env))]))]
 
-    [((~datum let) ~! ([id:id expr:expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
+    [((~datum let) ~! ([x:id e:expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
                  "duplicate identifier"
-     (let/seq ([vs (abstract-eval-syntaxes #'(expr ...) env)])
-       (abstract-eval-syntax #'body (bind* env #'(id ...) vs)))]
+     (define inner-Γ
+       (for/fold ([Γ env])
+                 ([x (in-syntax #'(x ...))]
+                  [e (in-syntax #'(e ...))])
+         (let/seq ([v (abstract-eval-syntax e Γ)])
+           (bind Γ x v))))
+     (seq inner-Γ (abstract-eval-syntax #'body inner-Γ))]
 
-    [((~datum letrec) ~! ([id:id expr:expr] ...) body)
-     (let ([new-env (fresh* env #'(id ...))])
-       (seq (for/seq ([id (in-syntax #'(id ...))]
-                      [expr (in-syntax #'(expr ...))])
-              (let/seq ([v (abstract-eval-syntax expr new-env)])
-                (bind! new-env id v)))
-            (abstract-eval-syntax #'body new-env)))]
+    [((~datum letrec) ~! ([x:id e:expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
+                 "duplicate identifier"
+     (define inner-Γ
+       (for/fold ([Γ env])
+                 ([x (in-syntax #'(x ...))])
+         (bind Γ x Bot)))
+     (seq
+       (for/seq ([x (in-syntax #'(x ...))]
+                 [e (in-syntax #'(e ...))])
+         (let/seq ([v (abstract-eval-syntax e inner-Γ)])
+           (rebind! inner-Γ x v)))
+       (abstract-eval-syntax #'body inner-Γ))]
 
     [(proc-expr:expr arg-expr:expr ...)
      (let/seq ([proc (abstract-eval-syntax #'proc-expr env)]
@@ -77,6 +88,7 @@
     [(closure? proc)
      (abstract-eval-syntax
       (closure-body proc)
-      (bind* (closure-environment proc)
-             (closure-arg-id-list proc)
-             args))]))
+      (for/fold ([env (closure-environment proc)])
+                ([arg-id (in-syntax (closure-arg-id-list proc))]
+                 [arg (in-list args)])
+        (bind env arg-id arg)))]))

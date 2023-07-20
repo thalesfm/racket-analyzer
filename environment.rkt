@@ -5,71 +5,28 @@
  (contract-out
   [make-empty-environment (-> environment?)]
   [bind (-> environment? identifier? any/c environment?)]
-  [bind* (-> environment? stx-list? list? environment?)]
-  [bind! (-> environment? identifier? any/c void?)]
-  [fresh (-> environment? identifier? environment?)]
-  [fresh* (-> environment? stx-list? environment?)]
+  [rebind! (-> environment? identifier? any/c void?)]
   [lookup (-> environment? identifier? any/c)]
   [environment-lub (-> environment? environment? environment?)]
 ))
 
-(require syntax/stx
+(require racket/hash
          "types.rkt")
 
-;; TODO: Make module implementation independent on the domain definition
-
-(define (massoc v lst [is-equal? equal?])
-  (findf (λ (p) (is-equal? (mcar p) v)) lst))
-
-(struct environment (assoc-list)
-        #:mutable
-        #:constructor-name make-environment)
-
-(define (make-entry id v)
-  (mcons (syntax->datum id) v))
+(define environment? hash?)
 
 (define (make-empty-environment)
-  (make-environment null))
+  (hash))
 
-(define (bind env id v)
-  (define lst (environment-assoc-list env))
-  (define entry (make-entry id v))
-  (make-environment (cons entry lst)))
+(define (bind Γ id v)
+  (hash-set Γ (syntax-e id) (box v)))
 
-(define (bind! env id v)
-  (define lst (environment-assoc-list env))
-  (define entry (massoc (syntax->datum id) lst))
-  (if entry
-      (set-mcdr! entry v)
-      (set-environment-assoc-list! (cons (make-entry id v) lst))))
+(define (rebind! Γ id v)
+  (set-box! (hash-ref Γ (syntax-e id)) v))
 
-(define (bind* env id-list v-list)
-  (for/fold ([env env])
-            ([id (in-syntax id-list)]
-             [v (in-list v-list)])
-    (bind env id v)))
-
-(define (fresh env id)
-  (bind env id Bot))
-
-(define (fresh* env id-list)
-  (for/fold ([env env])
-            ([id (in-syntax id-list)])
-    (fresh env id)))
-
-(define (lookup env id)
-  (define lst (environment-assoc-list env))
-  (define entry (massoc (syntax->datum id) lst))
-  (if entry (mcdr entry) Bot))
+(define (lookup Γ id)
+  (define box (hash-ref Γ (syntax-e id) #f))
+  (if box (unbox box) Bot))
 
 (define (environment-lub env1 env2)
-  (define keys1
-    (for/set ([p (in-list (environment-assoc-list env1))])
-      (datum->syntax #f (mcar p))))
-  (define keys2
-    (for/set ([p (in-list (environment-assoc-list env2))])
-      (datum->syntax #f (mcar p))))
-  (define keys (set-union keys1 keys2))
-  (make-environment
-    (for/list ([k (in-set keys)])
-      (mcons (syntax->datum k) (lub (lookup env1 k) (lookup env2 k))))))
+  (hash-union env1 env2 #:combine lub))
