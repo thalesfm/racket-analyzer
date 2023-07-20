@@ -2,7 +2,8 @@
 
 (provide make-base-environment)
 
-(require "environment.rkt"
+(require syntax/strip-context
+        "environment.rkt"
          "types.rkt")
 
 (define (constant? v)
@@ -13,16 +14,17 @@
 
 (define (lift proc)
   (lambda args
-    (if (andmap constant? args) (apply proc args) Top)))
+    (if (andmap constant? args)
+        (apply proc args)
+        Top)))
 
 (define (make-base-environment)
   (let* ([Γ (make-empty-environment)]
-         [Γ (bind Γ #'+ (lift +))]
-         [Γ (bind Γ #'+ (lift +))]
-         [Γ (bind Γ #'- (lift -))]
-         [Γ (bind Γ #'* (lift *))]
-         [Γ (bind Γ #'/ (lift /))]
-         [Γ (bind Γ #'= (lift =))]
-         [Γ (bind Γ #'read (λ () Top))]
-         [Γ (bind Γ #'error (λ () Bot))])
+         [Γ (bind Γ (strip-context #'+) (lift +))]
+         [Γ (bind Γ (strip-context #'-) (lift -))]
+         [Γ (bind Γ (strip-context #'*) (lift *))]
+         [Γ (bind Γ (strip-context #'/) (lift /))]
+         [Γ (bind Γ (strip-context #'=) (lift =))]
+         [Γ (bind Γ (strip-context #'read) (λ () Top))]
+         [Γ (bind Γ (strip-context #'error) (λ () Bot))])
     Γ))

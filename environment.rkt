@@ -1,31 +1,26 @@
 #lang racket
 
-(provide
- environment?
- (contract-out
-  [make-empty-environment (-> environment?)]
-  [bind (-> environment? identifier? any/c environment?)]
-  [rebind! (-> environment? identifier? any/c void?)]
-  [lookup (-> environment? identifier? any/c)]
-  [environment-lub (-> environment? environment? environment?)]
-))
+(provide make-empty-environment
+         bind
+         rebind!
+         lookup
+         environment-lub)
 
 (require racket/hash
+         syntax/id-table
          "types.rkt")
 
-(define environment? hash?)
-
 (define (make-empty-environment)
-  (hash))
+  (make-immutable-free-id-table))
 
 (define (bind Γ id v)
-  (hash-set Γ (syntax-e id) (box v)))
+  (dict-set Γ id (box v)))
 
 (define (rebind! Γ id v)
-  (set-box! (hash-ref Γ (syntax-e id)) v))
+  (set-box! (dict-ref Γ id) v))
 
 (define (lookup Γ id)
-  (define box (hash-ref Γ (syntax-e id) #f))
+  (define box (dict-ref Γ id #f))
   (if box (unbox box) Bot))
 
 (define (environment-lub env1 env2)
