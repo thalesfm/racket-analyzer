@@ -8,8 +8,6 @@
          "seq.rkt"
          "types.rkt")
 
-(struct closure (arg-id-list body environment))
-
 ;; (define result? (disjoin value? ⊥?))
 ;; (call/seq (-> result? (-> value? result?) result?))
 
@@ -29,13 +27,13 @@
 
     [datum
      #:when (literal? #'datum)
-     (syntax->datum #'datum)]
+     (syntax-e #'datum)]
 
     [((~datum quote) ~! datum)
-     (syntax->datum #'datum)]
+     (syntax-e #'datum)]
 
     [((~datum lambda) ~! (id:id ...) body)
-     (closure #'(id ...) #'body env)]
+     (Closure #'(id ...) #'body env)]
 
     [((~datum if) ~! test:expr then:expr else:expr)
      (let/seq ([test-v (abstract-eval-syntax #'test env)])
@@ -83,12 +81,12 @@
                (cons v lst)))))
 
 (define (abstract-apply proc args)
-  (cond
-    [(procedure? proc) (apply proc args)]
-    [(closure? proc)
+  (match proc
+    [(? procedure?) (apply proc args)]
+    [(Closure arg-id-list body-stx captured-env)
      (abstract-eval-syntax
-      (closure-body proc)
-      (for/fold ([env (closure-environment proc)])
-                ([arg-id (in-syntax (closure-arg-id-list proc))]
-                 [arg (in-list args)])
-        (bind env arg-id arg)))]))
+       body-stx
+       (for/fold ([env captured-env])
+                 ([arg-id (in-syntax arg-id-list)]
+                  [arg (in-list args)])
+         (bind env arg-id arg)))]))
