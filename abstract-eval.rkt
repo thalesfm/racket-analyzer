@@ -15,15 +15,18 @@
   (let ([v (syntax-e stx)])
     (and (type? v) (literal-type? v))))
 
+(struct closure (arg-id-lists lambda-body-stx environment) #:prefab)
+
 (define (abstract-eval expr)
-  (abstract-eval-syntax (datum->syntax #f expr) (make-base-environment)))
+  (abstract-eval-syntax (datum->syntax #f expr)
+                        (make-base-environment)))
 
 ;; FIXME: Avoid using ~datum in patterns if possible
 (define (abstract-eval-syntax stx env)
   (syntax-parse stx
 
     [id:id
-     (lookup env #'id)]
+     (environment-ref env #'id Bot)]
 
     [datum
      #:when (literal? #'datum)
@@ -33,7 +36,7 @@
      (syntax-e #'datum)]
 
     [((~datum lambda) ~! (id:id ...) body)
-     (Closure #'(id ...) #'body env)]
+     (closure #'(id ...) #'body env)]
 
     [((~datum if) ~! test:expr then:expr else:expr)
      (let/seq ([test-v (abstract-eval-syntax #'test env)])
@@ -46,27 +49,27 @@
     [((~datum let) ~! ([x:id e:expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
                  "duplicate identifier"
-     (define inner-Γ
-       (for/fold ([Γ env])
+     (define inner-env
+       (for/fold ([env env])
                  ([x (in-syntax #'(x ...))]
                   [e (in-syntax #'(e ...))])
-         (let/seq ([v (abstract-eval-syntax e Γ)])
-           (bind Γ x v))))
-     (seq inner-Γ (abstract-eval-syntax #'body inner-Γ))]
+         (let/seq ([v (abstract-eval-syntax e env)])
+           (environment-set env x v))))
+     (seq inner-env (abstract-eval-syntax #'body inner-env))]
 
     [((~datum letrec) ~! ([x:id e:expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
                  "duplicate identifier"
-     (define inner-Γ
-       (for/fold ([Γ env])
+     (define inner-env
+       (for/fold ([env env])
                  ([x (in-syntax #'(x ...))])
-         (bind Γ x Bot)))
+         (environment-set env x (make-placeholder Bot))))
      (seq
        (for/seq ([x (in-syntax #'(x ...))]
                  [e (in-syntax #'(e ...))])
-         (let/seq ([v (abstract-eval-syntax e inner-Γ)])
-           (rebind! inner-Γ x v)))
-       (abstract-eval-syntax #'body inner-Γ))]
+         (let/seq ([v (abstract-eval-syntax e inner-env)])
+           (placeholder-set! (environment-ref inner-env x) v)))
+       (abstract-eval-syntax #'body (make-reader-graph inner-env)))]
 
     [(proc-expr:expr arg-expr:expr ...)
      (let/seq ([proc (abstract-eval-syntax #'proc-expr env)]
@@ -83,10 +86,10 @@
 (define (abstract-apply proc args)
   (match proc
     [(? procedure?) (apply proc args)]
-    [(Closure arg-id-list body-stx captured-env)
+    [(closure arg-id-list body-stx captured-env)
      (abstract-eval-syntax
        body-stx
        (for/fold ([env captured-env])
                  ([arg-id (in-syntax arg-id-list)]
                   [arg (in-list args)])
-         (bind env arg-id arg)))]))
+         (environment-set env arg-id arg)))]))

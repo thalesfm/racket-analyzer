@@ -14,8 +14,7 @@
          (type-out Exact-Nonnegative-Integer)
          (type-out Null)
          (type-out Pairof)
-         (type-out Listof)
-         (type-out Closure))
+         (type-out Listof))
 
 (provide
  (contract-out
@@ -54,11 +53,6 @@
 (define-type-constructor Pairof #:arity 2)
 (define-type-constructor Listof #:arity 1)
 ;; (define-type List (Listof Top))
-
-;; (Closure <arg-id-list> <body-stx> <captured-env>)
-(define-type-constructor Closure #:arity 3)
-;; (Procedure <arg-type-list> <return-type>)
-;; (define-type Procedure #:arity 2)
 
 (define literal-type?
   (disjoin boolean? number? char? string? symbol?))
@@ -121,14 +115,10 @@
      (let ([sup (super t)])
        (if sup (Listof sup) (next)))]
 
-    [(Closure _ _ _) Top]
-
     [_ #f]))
 
 (define (type=? t1 t2)
-  (if (or (Closure? t1) (Closure? t2))
-      (error "not implemented")
-      (equal? t1 t2)))
+  (equal? t1 t2))
 
 (define/match (type<=? t1 t2)
   [(_        (== Top)) #t]
@@ -140,9 +130,6 @@
                                         (type<=? d (Listof t)))]
   [((Pairof a1 d1) (Pairof a2 d2)) (and (type<=? a1 a2)
                                         (type<=? d1 d2))]
-
-  [((Closure _ b1 _) (Closure _ b2 _))
-   (error "not implemented")]
 
   [(t1 t2) #:when (type=? t1 t2) #t]
   ;; TODO: Check if this still makes sense

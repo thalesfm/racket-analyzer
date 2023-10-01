@@ -20,11 +20,11 @@
 
 (define (make-base-environment)
   (let* ([Γ (make-empty-environment)]
-         [Γ (bind Γ (strip-context #'+) (lift +))]
-         [Γ (bind Γ (strip-context #'-) (lift -))]
-         [Γ (bind Γ (strip-context #'*) (lift *))]
-         [Γ (bind Γ (strip-context #'/) (lift /))]
-         [Γ (bind Γ (strip-context #'=) (lift =))]
-         [Γ (bind Γ (strip-context #'read) (λ () Top))]
-         [Γ (bind Γ (strip-context #'error) (λ () Bot))])
+         [Γ (environment-set Γ (strip-context #'+) (lift +))]
+         [Γ (environment-set Γ (strip-context #'-) (lift -))]
+         [Γ (environment-set Γ (strip-context #'*) (lift *))]
+         [Γ (environment-set Γ (strip-context #'/) (lift /))]
+         [Γ (environment-set Γ (strip-context #'=) (lift =))]
+         [Γ (environment-set Γ (strip-context #'read) (λ () Top))]
+         [Γ (environment-set Γ (strip-context #'error) (λ () Bot))])
     Γ))
