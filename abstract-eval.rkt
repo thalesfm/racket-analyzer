@@ -15,7 +15,19 @@
   (let ([v (syntax-e stx)])
     (and (type? v) (literal-type? v))))
 
-(struct closure (arg-id-lists lambda-body-stx environment) #:prefab)
+(struct closure (lambda-stx environment)
+        #:prefab)
+
+(define (closure-arg-ids clo)
+  (syntax-case (closure-lambda-stx clo) ()
+    [(lambda (id ...) body) #'(id ...)]))
+
+(define (closure-body-stx clo)
+  (syntax-case (closure-lambda-stx clo) ()
+    [(lambda (id ...) body) #'body]))
+
+(define-syntax-class lambda
+  (pattern ((~datum lambda) ~! (id:id ...) body:expr)))
 
 (define (abstract-eval expr)
   (abstract-eval-syntax (datum->syntax #f expr)
@@ -35,8 +47,8 @@
     [((~datum quote) ~! datum)
      (syntax-e #'datum)]
 
-    [((~datum lambda) ~! (id:id ...) body)
-     (closure #'(id ...) #'body env)]
+    [lam:lambda
+     (closure #'lam env)]
 
     [((~datum if) ~! test:expr then:expr else:expr)
      (let/seq ([test-v (abstract-eval-syntax #'test env)])
@@ -86,10 +98,10 @@
 (define (abstract-apply proc args)
   (match proc
     [(? procedure?) (apply proc args)]
-    [(closure arg-id-list body-stx captured-env)
+    [(? closure?)
      (abstract-eval-syntax
-       body-stx
-       (for/fold ([env captured-env])
-                 ([arg-id (in-syntax arg-id-list)]
+       (closure-body-stx proc)
+       (for/fold ([env (closure-environment proc)])
+                 ([arg-id (in-syntax (closure-arg-ids proc))]
                   [arg (in-list args)])
          (environment-set env arg-id arg)))]))
