@@ -1,7 +1,7 @@
 #lang racket
 
-(provide (type-out Top)
-         (type-out Bot)
+(provide (type-out Top) (rename-out [Top T] [Top? T?])
+         (type-out Bot) (rename-out [Bot ⊥] [Bot? ⊥?])
          (type-out Truthy)
          (type-out Char)
          (type-out String)

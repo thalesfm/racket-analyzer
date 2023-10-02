@@ -6,11 +6,7 @@
          "environment.rkt"
          "free-vars.rkt"
          "primops.rkt"
-         "seq.rkt"
          "types.rkt")
-
-;; (define result? (disjoin value? ⊥?))
-;; (call/seq (-> result? (-> value? result?) result?))
 
 (define (literal? stx)
   (let ([v (syntax-e stx)])
@@ -30,6 +26,11 @@
 (define-syntax-class lambda
   (pattern ((~datum lambda) ~! (id:id ...) body:expr)))
 
+(define (capture-vars env vars)
+  (for/fold ([acc (make-empty-environment)])
+            ([var vars])
+    (environment-set acc var (environment-ref env var ⊥))))
+
 (define (abstract-eval expr)
   (abstract-eval-syntax (datum->syntax #f expr)
                         (make-base-environment)))
@@ -38,57 +39,67 @@
   (syntax-parse stx
     #:datum-literals (quote if let letrec)
 
-    [var:id (environment-ref env #'var Bot)]
+    [var:id (environment-ref env #'var ⊥)]
     [datum #:when (literal? #'datum) (syntax-e #'datum)]
     [(quote ~! datum) (syntax-e #'datum)]
 
     [lambda-expr:lambda
-     (closure #'lambda-expr
-              (make-captured-environment env (free-vars #'lambda-expr) Bot))]
+     (closure #'lambda-expr (capture-vars env (free-vars #'lambda-expr)))]
 
-    [(if ~! test:expr then:expr else:expr)
-     (let/seq ([test-v (abstract-eval-syntax #'test env)])
-       (cond
-         [(type<=? test-v Truthy) (abstract-eval-syntax #'then env)]
-         [(eq? test-v #f) (abstract-eval-syntax #'else env)]
-         [(eq? test-v Top) (lub (abstract-eval-syntax #'then env)
-                                (abstract-eval-syntax #'else env))]))]
+    [(if ~! expr1:expr expr2:expr expr3:expr)
+     (define v1 (abstract-eval-syntax #'expr1 env))
+     (cond
+       [(⊥? v1) ⊥]
+       [(T? v1)
+        (lub (abstract-eval-syntax #'expr2 env)
+             (abstract-eval-syntax #'expr3 env))]
+       [(not (eq? v1 #f))
+        (abstract-eval-syntax #'expr2 env)]
+       [(eq? v1 #f)
+        (abstract-eval-syntax #'expr3 env)])]
 
-    [(let ~! ([x:id e:expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
+    [(let ~! ([var:id val-expr:expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(var ...)))
                  "duplicate identifier"
-     (define inner-env
-       (for/fold ([env env])
-                 ([x (in-syntax #'(x ...))]
-                  [e (in-syntax #'(e ...))])
-         (let/seq ([v (abstract-eval-syntax e env)])
-           (environment-set env x v))))
-     (seq inner-env (abstract-eval-syntax #'body inner-env))]
+     (let/ec break
+       (define env-prime
+         (for/fold ([acc env])
+                   ([var (in-syntax #'(var ...))]
+                    [val-expr (in-syntax #'(val-expr ...))])
+           (let ([v (abstract-eval-syntax val-expr env)])
+             (if (⊥? v)
+                 (break ⊥)
+                 (environment-set acc var v)))))
+       (abstract-eval-syntax #'body env-prime))]
 
-    [(letrec ~! ([x:id e:expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
+    [(letrec ~! ([var:id val-expr:expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(var ...)))
                  "duplicate identifier"
-     (define inner-env
-       (for/fold ([env env])
-                 ([x (in-syntax #'(x ...))])
-         (environment-set env x (make-placeholder Bot))))
-     (seq
-       (for/seq ([x (in-syntax #'(x ...))]
-                 [e (in-syntax #'(e ...))])
-         (let/seq ([v (abstract-eval-syntax e inner-env)])
-           (placeholder-set! (environment-ref inner-env x #f) v)))
-       (abstract-eval-syntax #'body (make-reader-graph inner-env)))]
+     (define env-prime
+       (for/fold ([acc env])
+                 ([var (in-syntax #'(var ...))])
+         (environment-set acc var (make-placeholder ⊥))))
+     (let/ec break
+       (for ([var (in-syntax #'(var ...))]
+             [val-expr (in-syntax #'(val-expr ...))])
+         (let ([v (abstract-eval-syntax val-expr env-prime)])
+           (if (⊥? v)
+               (break ⊥)
+               (placeholder-set! (environment-ref env-prime var) v))))
+       (abstract-eval-syntax #'body (make-reader-graph env-prime)))]
 
     [(proc-expr:expr arg-expr:expr ...)
-     (let/seq ([proc (abstract-eval-syntax #'proc-expr env)]
-               [args (abstract-eval-syntaxes #'(arg-expr ...) env)])
+     (let/ec break
+       (define proc (abstract-eval-syntax #'proc-expr env))
+       (when (⊥? proc)
+         (break ⊥))
+       (define args
+         (for/list ([arg-expr (in-syntax #'(arg-expr ...))])
+           (let ([v (abstract-eval-syntax arg-expr env)])
+             (if (⊥? v)
+                 (break ⊥)
+                 v))))
        (abstract-apply proc args))]))
-
-(define (abstract-eval-syntaxes stx-list env)
-  (for/foldr ([lst null])
-             ([stx (in-syntax stx-list)])
-    (seq lst (let/seq ([v (abstract-eval-syntax stx env)])
-               (cons v lst)))))
 
 (define (abstract-apply proc args)
   (match proc

@@ -10,16 +10,17 @@
 ;; TODO: Cache results as syntax properties
 (define (free-vars stx)
   (syntax-parse stx
-    #:datum-literals (quote if let letrec)
+    #:datum-literals (quote lambda if let letrec)
     [var:id (set (syntax-e #'var))]
+    [datum #:when (not (list? (syntax-e #'datum))) (set)]
     [(quote ~! _) (set)]
-    [((~datum lambda) ~! (arg-id:id ...) body:expr)
+    [(lambda ~! (arg-id:id ...) body:expr)
      (set-subtract (free-vars #'body)
                    (list->set (syntax->list #'(arg-id ...))))]
-    [(if ~! test:expr then:expr else:expr)
-     (set-union (free-vars #'test)
-                (free-vars #'then)
-                (free-vars #'else))]
+    [(if ~! expr1:expr expr2:expr expr3:expr)
+     (set-union (free-vars #'expr1)
+                (free-vars #'expr2)
+                (free-vars #'expr3))]
     [(let ~! ([var:id val-expr:expr] ...) body)
      (set-union
        (union-map free-vars (syntax->list #'(val-expr ...)))
@@ -33,5 +34,4 @@
        (set-subtract (free-vars #'body)
                      (list->set (syntax->list #'(var ...)))))]
     [(proc-expr:expr arg-expr:expr ...)
-     (union-map free-vars (syntax->list #'(proc-expr arg-expr ...)))]
-    [datum #:when (not (list? (syntax-e #'datum))) (set)]))
+     (union-map free-vars (syntax->list #'(proc-expr arg-expr ...)))]))
