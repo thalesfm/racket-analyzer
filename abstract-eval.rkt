@@ -4,6 +4,7 @@
 
 (require syntax/parse
          "environment.rkt"
+         "free-vars.rkt"
          "primops.rkt"
          "seq.rkt"
          "types.rkt")
@@ -20,11 +21,11 @@
 
 (define (closure-arg-ids clo)
   (syntax-case (closure-lambda-stx clo) ()
-    [(lambda (id ...) body) #'(id ...)]))
+    [(_ (id ...) _) #'(id ...)]))
 
 (define (closure-body-stx clo)
   (syntax-case (closure-lambda-stx clo) ()
-    [(lambda (id ...) body) #'body]))
+    [(_ (_ ...) body) #'body]))
 
 (define-syntax-class lambda
   (pattern ((~datum lambda) ~! (id:id ...) body:expr)))
@@ -33,24 +34,19 @@
   (abstract-eval-syntax (datum->syntax #f expr)
                         (make-base-environment)))
 
-;; FIXME: Avoid using ~datum in patterns if possible
 (define (abstract-eval-syntax stx env)
   (syntax-parse stx
+    #:datum-literals (quote if let letrec)
 
-    [id:id
-     (environment-ref env #'id Bot)]
+    [var:id (environment-ref env #'var Bot)]
+    [datum #:when (literal? #'datum) (syntax-e #'datum)]
+    [(quote ~! datum) (syntax-e #'datum)]
 
-    [datum
-     #:when (literal? #'datum)
-     (syntax-e #'datum)]
+    [lambda-expr:lambda
+     (closure #'lambda-expr
+              (make-captured-environment env (free-vars #'lambda-expr) Bot))]
 
-    [((~datum quote) ~! datum)
-     (syntax-e #'datum)]
-
-    [lam:lambda
-     (closure #'lam env)]
-
-    [((~datum if) ~! test:expr then:expr else:expr)
+    [(if ~! test:expr then:expr else:expr)
      (let/seq ([test-v (abstract-eval-syntax #'test env)])
        (cond
          [(type<=? test-v Truthy) (abstract-eval-syntax #'then env)]
@@ -58,7 +54,7 @@
          [(eq? test-v Top) (lub (abstract-eval-syntax #'then env)
                                 (abstract-eval-syntax #'else env))]))]
 
-    [((~datum let) ~! ([x:id e:expr] ...) body)
+    [(let ~! ([x:id e:expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
                  "duplicate identifier"
      (define inner-env
@@ -69,7 +65,7 @@
            (environment-set env x v))))
      (seq inner-env (abstract-eval-syntax #'body inner-env))]
 
-    [((~datum letrec) ~! ([x:id e:expr] ...) body)
+    [(letrec ~! ([x:id e:expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(x ...)))
                  "duplicate identifier"
      (define inner-env
@@ -80,14 +76,13 @@
        (for/seq ([x (in-syntax #'(x ...))]
                  [e (in-syntax #'(e ...))])
          (let/seq ([v (abstract-eval-syntax e inner-env)])
-           (placeholder-set! (environment-ref inner-env x) v)))
+           (placeholder-set! (environment-ref inner-env x #f) v)))
        (abstract-eval-syntax #'body (make-reader-graph inner-env)))]
 
     [(proc-expr:expr arg-expr:expr ...)
      (let/seq ([proc (abstract-eval-syntax #'proc-expr env)]
                [args (abstract-eval-syntaxes #'(arg-expr ...) env)])
-       (abstract-apply proc args))]
-))
+       (abstract-apply proc args))]))
 
 (define (abstract-eval-syntaxes stx-list env)
   (for/foldr ([lst null])

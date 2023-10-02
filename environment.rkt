@@ -1,26 +1,32 @@
 #lang racket
 
 (provide make-empty-environment
+         make-captured-environment
          environment-set
          environment-ref)
 
-#;(require syntax/id-table)
+(define (raise-key-error name id)
+  (raise-arguments-error name "no value for for id" "id" id))
 
 (define (make-empty-environment)
   (hasheq))
 
+(define (make-captured-environment env ids failure-result)
+  (for/hasheq ([id ids])
+    (values id (environment-ref env id failure-result))))
+
+(define (->symbol v)
+  (if (identifier? v) (syntax-e v) v))
+
 (define (environment-set env id v)
-  (unless (identifier? id)
-    (raise-argument-error 'environment-set "identifier?" id))
-  (hash-set env (syntax-e id) v))
+  (unless (or (identifier? id) (symbol? id))
+    (raise-argument-error 'environment-set "(or/c identifier? symbol?)" id))
+  (hash-set env (->symbol id) v))
 
-(define ((raise-key-error id))
-  (raise-arguments-error 'environment-ref "no value for for id" "id" id))
-
-(define (environment-ref env id [failure-result (raise-key-error id)])
-  (unless (identifier? id)
-    (raise-argument-error 'environment-set "identifier?" id))
-  (hash-ref env (syntax-e id) failure-result))
+(define (environment-ref env id failure-result)
+  (unless (or (identifier? id) (symbol? id))
+    (raise-argument-error 'environment-set "(or/c identifier? symbol?)" id))
+  (hash-ref env (->symbol id) failure-result))
 
 #;(define (environment-lub env1 env2)
   (hash-union env1 env2 #:combine lub))
