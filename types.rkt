@@ -18,7 +18,7 @@
 
 (provide
  (contract-out
-  [literal-type? (-> type? boolean?)]
+  [literal-type? (-> any/c boolean?)]
   [type?         (-> any/c boolean?)]
   [datum->type   (-> any/c type?)]
   [type->datum   (-> type? any/c)]

@@ -1,6 +1,7 @@
+- Implement join operation for closures
+- Implement argument cache + backtracking
+- Implement fixpoint iteration
 - Add more primitive procedures
 - Add error information to bottom values
 - Add contract checks to lifted procedures
-- Implement monomorphic analysis (w/ fixpoint iteration, etc.)
-- Better organize all tests
 - Check performance impact of using contracts (especially `abstract?`)
