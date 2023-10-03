@@ -2,10 +2,8 @@
 
 (provide free-vars)
 
-(require syntax/parse)
-
-(define (union-map proc lst)
-  (apply set-union (map proc lst)))
+(require syntax/parse
+         syntax/stx)
 
 ;; TODO: Cache results as syntax properties
 (define (free-vars stx)
@@ -15,23 +13,23 @@
     [datum #:when (not (list? (syntax-e #'datum))) (set)]
     [(quote ~! _) (set)]
     [(lambda ~! (arg-id:id ...) body:expr)
-     (set-subtract (free-vars #'body)
-                   (list->set (syntax->list #'(arg-id ...))))]
+     (define arg-ids (list->set (stx-map syntax-e #'(arg-id ...))))
+     (set-subtract (free-vars #'body) arg-ids)]
     [(if ~! expr1:expr expr2:expr expr3:expr)
      (set-union (free-vars #'expr1)
                 (free-vars #'expr2)
                 (free-vars #'expr3))]
     [(let ~! ([var:id val-expr:expr] ...) body)
-     (set-union
-       (union-map free-vars (syntax->list #'(val-expr ...)))
-       (set-subtract (free-vars #'body)
-                     (list->set (syntax->list #'(var ...)))))]
+     (define bound-vars (list->set (stx-map syntax-e #'(var ...))))
+     (apply set-union
+            (set-subtract (free-vars #'body) bound-vars)
+            (stx-map free-vars #'(val-expr ...)))]
     [(letrec ~! ([var:id val-expr:expr] ...) body)
-     ;; FIXME: `var` should not be considered a free variable in
-     ;; subsequent value expressions
-     (set-union
-       (union-map free-vars (syntax->list #'(val-expr ...)))
-       (set-subtract (free-vars #'body)
-                     (list->set (syntax->list #'(var ...)))))]
-    [(proc-expr:expr arg-expr:expr ...)
-     (union-map free-vars (syntax->list #'(proc-expr arg-expr ...)))]))
+     (define bound-vars (list->set (stx-map syntax-e #'(var ...))))
+     (set-subtract
+       (apply set-union
+              (free-vars #'body)
+              (stx-map free-vars #'(val-expr ...)))
+       bound-vars)]
+    [(expr:expr ...)
+     (apply set-union (stx-map free-vars #'(expr ...)))]))
