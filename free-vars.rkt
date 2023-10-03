@@ -5,8 +5,15 @@
 (require syntax/parse
          syntax/stx)
 
-;; TODO: Cache results as syntax properties
+(define memo
+  (make-thread-cell (make-weak-hasheq)))
+
 (define (free-vars stx)
+  (hash-ref! (thread-cell-ref memo)
+             stx
+             (lambda () (compute-free-vars stx))))
+
+(define (compute-free-vars stx)
   (syntax-parse stx
     #:datum-literals (quote lambda if let letrec)
     [var:id (set (syntax-e #'var))]
