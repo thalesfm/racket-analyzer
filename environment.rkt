@@ -2,7 +2,10 @@
 
 (provide make-empty-environment
          environment-set
-         environment-ref)
+         environment-ref
+         environment-union)
+
+(require racket/hash)
 
 (define (make-empty-environment)
   (hasheq))
@@ -19,3 +22,6 @@
   (unless (or (identifier? id) (symbol? id))
     (raise-argument-error 'environment-set "(or/c identifier? symbol?)" id))
   (apply hash-ref env (coerce-symbol id) maybe-failure-result))
+
+(define (environment-union env1 env2 #:combine combine)
+  (hash-union env1 env2 #:combine combine))

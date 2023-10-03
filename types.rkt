@@ -23,7 +23,7 @@
   [datum->type   (-> any/c type?)]
   [type->datum   (-> type? any/c)]
   [type<=?       (-> type? type? boolean?)]
-  [lub           (-> type? type? type?)]
+  [type-lub      (-> type? type? type?)]
   [rename datum->type α (-> any/c type?)]
   [rename type->datum γ (-> type? any/c)]))
 
@@ -142,23 +142,23 @@
 
   [(_  _ ) #f])
 
-(define/match (lub t1 t2)
+(define/match (type-lub t1 t2)
   [((== Top) _       ) Top]
   [(_        (== Top)) Top]
   [((== Bot) t       ) t]
   [(t        (== Bot)) t]
 
-  [((Listof t1)    (Listof t2)   ) (Listof (lub t1 t2))]
-  [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (lub a1 a2) (lub d1 d2))]
-  [((Pairof a  d ) (== Null)     ) (lub (Pairof a d) (Listof Bot))]
-  [((== Null)      (Pairof a  d )) (lub (Pairof a d) (Listof Bot))]
+  [((Listof t1)    (Listof t2)   ) (Listof (type-lub t1 t2))]
+  [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (type-lub a1 a2) (type-lub d1 d2))]
+  [((Pairof a  d ) (== Null)     ) (type-lub (Pairof a d) (Listof Bot))]
+  [((== Null)      (Pairof a  d )) (type-lub (Pairof a d) (Listof Bot))]
   [((Pairof a  d ) (Listof t )   )
-   (match (lub d (Listof t))
-     [(Listof t*) (Listof (lub a t*))]
+   (match (type-lub d (Listof t))
+     [(Listof t*) (Listof (type-lub a t*))]
      [_           Truthy])]
   [((Listof t )    (Pairof a  d ))
-   (match (lub d (Listof t))
-     [(Listof t*) (Listof (lub a t*))]
+   (match (type-lub d (Listof t))
+     [(Listof t*) (Listof (type-lub a t*))]
      [_           Truthy])]
 
   ;; These cases are reduntant but avoid expensive `type<=?` comparisons
@@ -167,7 +167,7 @@
 
   [(t1 t2) #:when (equal?  t1 t2) t1]
   [(t1 t2) #:when (or (literal-type? t1) (literal-type? t2))
-   (lub (if (literal-type? t1) (super t1) t1)
+   (type-lub (if (literal-type? t1) (super t1) t1)
         (if (literal-type? t2) (super t2) t2))]
   [(t1 t2) #:when (type<=? t1 t2) t2]
   [(t1 t2) #:when (type<=? t2 t1) t1]

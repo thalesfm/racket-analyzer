@@ -1,4 +1,3 @@
-- Implement join operation for closures
 - Implement argument cache + backtracking
 - Implement fixpoint iteration
 - Add more primitive procedures

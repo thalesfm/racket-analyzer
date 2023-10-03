@@ -1,6 +1,7 @@
 #lang racket
 
-(provide abstract-eval)
+(provide abstract-eval
+         (struct-out closure))
 
 (require syntax/parse
          "environment.rkt"
@@ -18,10 +19,28 @@
   (syntax-case (closure-lambda clo) ()
     [(_ _ body) #'body]))
 
+(define (closure-lub clo1 clo2)
+  (cond
+   [(eq? (closure-lambda clo1) (closure-lambda clo2))
+    (closure (closure-lambda clo1)
+             (environment-lub (closure-environment clo1)
+                              (closure-environment clo2)))]
+   [else T]))
+
 (define (capture env vars)
   (for/fold ([acc (make-empty-environment)])
             ([var vars])
     (environment-set acc var (environment-ref env var ⊥))))
+
+(define (environment-lub env1 env2)
+  (environment-union env1 env2 #:combine lub))
+
+(define (lub v1 v2)
+  (cond
+   [(eq? v1 v2) v1]
+   [(and (closure? v1) (closure? v2)) (closure-lub v1 v2)]
+   [(or (closure? v1) (closure? v2)) T]
+   [else (type-lub v1 v2)]))
 
 (define (abstract-eval expr)
   (abstract-eval-syntax (datum->syntax #f expr)
@@ -86,6 +105,7 @@
 
 (define (abstract-apply proc args)
   (cond
+   [(T? proc) T]
    [(procedure? proc) (apply proc args)]
    [(closure? proc)
     (define env-prime
@@ -93,4 +113,5 @@
                 ([arg-id (in-syntax (closure-arg-ids proc))]
                  [arg (in-list args)])
         (environment-set acc arg-id arg)))
-    (abstract-eval-syntax (closure-body-expr proc) env-prime)]))
+    (abstract-eval-syntax (closure-body-expr proc) env-prime)]
+  [else ⊥]))

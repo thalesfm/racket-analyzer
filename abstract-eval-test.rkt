@@ -2,6 +2,7 @@
 
 (require rackunit
          "abstract-eval.rkt"
+         "environment.rkt"
          "types.rkt")
 
 (check-equal? (abstract-eval 10) 10)
@@ -31,11 +32,11 @@
  120)
 
 (check-equal?
-  (abstract-eval
-   '(letrec ([even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))]
-             [odd? (lambda (n) (if (= n 0) #f (even? (- n 1))))])
-      (even? 101)))
-  #f)
+ (abstract-eval
+  '(letrec ([even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))]
+            [odd? (lambda (n) (if (= n 0) #f (even? (- n 1))))])
+     (even? 101)))
+ #f)
 
 (check-eq? (abstract-eval '(read)) Top)
 (check-eq? (abstract-eval '(+ (read) 10)) Top)
@@ -55,3 +56,41 @@
 (check-eq? (abstract-eval 'x) Bot)
 (check-eq? (abstract-eval '(let ([x 10]) y)) Bot)
 (check-eq? (abstract-eval '(if (read) 10 x)) 10)
+
+(check-not-eq? (abstract-eval '(if (read) + +)) T)
+
+(check-true
+ (closure?
+   (abstract-eval
+     '(let ([f (lambda (x) x)])
+        (if (read) f f)))))
+
+(check-eq?
+ (environment-ref
+  (closure-environment
+   (abstract-eval
+     '(let ([c (lambda (x) (lambda () x))])
+        (if (read)
+            (c 10)
+            (c 10)))))
+  'x)
+ 10)
+
+(check-true
+ (type<=?
+  (environment-ref
+   (closure-environment
+    (abstract-eval
+      '(let ([c (lambda (x) (lambda () x))])
+         (if (read)
+             (c 10)
+             (c 11)))))
+   'x)
+  Number))
+
+(check-eq?
+ (abstract-eval
+   '(if (read)
+        (lambda (x) x)
+        (lambda (y) y)))
+ Top)
