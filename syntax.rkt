@@ -8,7 +8,10 @@
   (lambda quote if let letrec))
 
 (define-conventions conventions
-  [var id] [#rx"id" id] [lit literal] [lam lambda-expr] [#rx"expr" expr])
+  [var id]
+  [lit literal]
+  [lam lambda-expr]
+  [#rx"(^|-)expr$" expr])
 
 (define-syntax-class atomic-datum
   (pattern (~fail #:when (list? (syntax-e this-syntax)))))

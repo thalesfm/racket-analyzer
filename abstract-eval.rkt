@@ -12,18 +12,6 @@
 
 (struct closure (lambda environment) #:prefab)
 
-; TODO: Check performance impact of using `syntax-parse` here instead of
-;       `syntax-case` (or simply `(cadr (syntax->list lambda-stx)`
-(define (closure-arg-ids clo)
-  (syntax-parse (closure-lambda clo)
-    [lam:lambda-expr #'(lam.arg-id ...)]))
-
-; TODO: Check performance impact of using `syntax-parse` here instead of
-;       `syntax-case` (or simply `(caddr (syntax->list lambda-stx)`
-(define (closure-body-expr clo)
-  (syntax-parse (closure-lambda clo)
-    [lam:lambda-expr #'lam.body]))
-
 (define (closure-lub clo1 clo2)
   (cond
    [(eq? (closure-lambda clo1) (closure-lambda clo2))
@@ -31,11 +19,6 @@
              (environment-lub (closure-environment clo1)
                               (closure-environment clo2)))]
    [else T]))
-
-(define (capture env vars)
-  (for/fold ([acc (make-empty-environment)])
-            ([var vars])
-    (environment-set acc var (environment-ref env var ⊥))))
 
 (define (environment-lub env1 env2)
   (environment-union env1 env2 #:combine lub))
@@ -67,7 +50,12 @@
      #:do [(define value (syntax->value (attribute lit.datum-stx)))]
      #:fail-unless (not (eq? value 'error)) "expected literal"
      value]
-    [lam (closure #'lam (capture env (free-vars #'lam)))]
+    [lam
+     (define captured-env
+       (for/fold ([acc (make-empty-environment)])
+                 ([var (free-vars #'lam)])
+         (environment-set acc var (environment-ref env var ⊥))))
+     (closure #'lam captured-env)]
     [(if ~! test-expr then-expr else-expr)
      (define test-val (abstract-eval-syntax #'test-expr env))
      (cond
@@ -121,10 +109,12 @@
    [(T? proc) T]
    [(procedure? proc) (apply proc args)]
    [(closure? proc)
+    (define/syntax-parse lam:lambda-expr
+      (closure-lambda proc))
     (define env-prime
       (for/fold ([acc (closure-environment proc)])
-                ([arg-id (in-syntax (closure-arg-ids proc))]
+                ([arg-id (in-syntax #'(lam.arg-id ...))]
                  [arg (in-list args)])
         (environment-set acc arg-id arg)))
-    (abstract-eval-syntax (closure-body-expr proc) env-prime)]
+    (abstract-eval-syntax #'lam.body env-prime)]
   [else ⊥]))

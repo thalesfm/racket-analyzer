@@ -20,9 +20,9 @@
     #:literal-sets (literal-set)
     [var (set (syntax-e #'var))]
     [lit (set)]
-    [(lambda ~! (arg-id ...) body)
-     (define arg-ids (list->set (stx-map syntax-e #'(arg-id ...))))
-     (set-subtract (free-vars #'body) arg-ids)]
+    [lam
+     (define arg-ids (list->set (stx-map syntax-e #'(lam.arg-id ...))))
+     (set-subtract (free-vars #'lam.body) arg-ids)]
     [(if ~! expr1 expr2 expr3)
      (set-union (free-vars #'expr1)
                 (free-vars #'expr2)
