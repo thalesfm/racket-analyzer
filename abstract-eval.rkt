@@ -48,8 +48,11 @@
    [else (type-lub v1 v2)]))
 
 (define (abstract-eval expr)
-  (abstract-eval-syntax (datum->syntax #f expr)
-                        (make-base-environment)))
+  (define stx
+    (namespace-syntax-introduce (datum->syntax #f expr)
+                                (make-base-namespace)))
+  (define env (make-base-environment))
+  (abstract-eval-syntax stx env))
 
 (define (syntax->value stx)
   (define v (syntax-e stx))
@@ -57,11 +60,11 @@
 
 (define (abstract-eval-syntax stx env)
   (syntax-parse stx
-    #:conventions (syntax-conventions)
-    #:literal-sets (syntax-literals)
+    #:conventions (conventions)
+    #:literal-sets (literal-set)
     [var (environment-ref env #'var ⊥)]
     [lit
-     #:do [(define value (syntax->value (attribute lit.datum)))]
+     #:do [(define value (syntax->value (attribute lit.datum-stx)))]
      #:fail-unless (not (eq? value 'error)) "expected literal"
      value]
     [lam (closure #'lam (capture env (free-vars #'lam)))]
