@@ -7,17 +7,22 @@
          "environment.rkt"
          "free-vars.rkt"
          "primops.rkt"
+         "syntax.rkt"
          "types.rkt")
 
 (struct closure (lambda environment) #:prefab)
 
+; TODO: Check performance impact of using `syntax-parse` here instead of
+;       `syntax-case` (or simply `(cadr (syntax->list lambda-stx)`
 (define (closure-arg-ids clo)
-  (syntax-case (closure-lambda clo) ()
-    [(_ arg-ids _) #'arg-ids]))
+  (syntax-parse (closure-lambda clo)
+    [lam:lambda-expr #'(lam.arg-id ...)]))
 
+; TODO: Check performance impact of using `syntax-parse` here instead of
+;       `syntax-case` (or simply `(caddr (syntax->list lambda-stx)`
 (define (closure-body-expr clo)
-  (syntax-case (closure-lambda clo) ()
-    [(_ _ body) #'body]))
+  (syntax-parse (closure-lambda clo)
+    [lam:lambda-expr #'lam.body]))
 
 (define (closure-lub clo1 clo2)
   (cond
@@ -46,24 +51,29 @@
   (abstract-eval-syntax (datum->syntax #f expr)
                         (make-base-environment)))
 
+(define (syntax->value stx)
+  (define v (syntax-e stx))
+  (if (literal-type? v) v 'error))
+
 (define (abstract-eval-syntax stx env)
   (syntax-parse stx
-    #:datum-literals (quote lambda if let letrec)
-    [var:id (environment-ref env #'var ⊥)]
-    [datum #:when (literal-type? (syntax-e #'datum))
-     (syntax-e #'datum)]
-    [(quote ~! datum) (syntax-e #'datum)]
-    [(~and lambda-expr (lambda ~! (_arg-id:id ...) _body:expr))
-     (closure #'lambda-expr (capture env (free-vars #'lambda-expr)))]
-    [(if ~! expr1:expr expr2:expr expr3:expr)
-     (define v1 (abstract-eval-syntax #'expr1 env))
+    #:conventions (syntax-conventions)
+    #:literal-sets (syntax-literals)
+    [var (environment-ref env #'var ⊥)]
+    [lit
+     #:do [(define value (syntax->value (attribute lit.datum)))]
+     #:fail-unless (not (eq? value 'error)) "expected literal"
+     value]
+    [lam (closure #'lam (capture env (free-vars #'lam)))]
+    [(if ~! test-expr then-expr else-expr)
+     (define test-val (abstract-eval-syntax #'test-expr env))
      (cond
-      [(⊥? v1) ⊥]
-      [(T? v1) (lub (abstract-eval-syntax #'expr2 env)
-                    (abstract-eval-syntax #'expr3 env))]
-      [(not (eq? v1 #f)) (abstract-eval-syntax #'expr2 env)]
-      [(eq? v1 #f)       (abstract-eval-syntax #'expr3 env)])]
-    [(let ~! ([var:id val-expr:expr] ...) body)
+      [(⊥? test-val) ⊥]
+      [(T? test-val) (lub (abstract-eval-syntax #'then-expr env)
+                          (abstract-eval-syntax #'else-expr env))]
+      [(not (eq? test-val #f)) (abstract-eval-syntax #'then-expr env)]
+      [(eq? test-val #f)       (abstract-eval-syntax #'else-expr env)])]
+    [(let ~! ([var val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(var ...)))
                  "duplicate identifier"
      (define vals
@@ -77,7 +87,7 @@
      (cond
       [(stream-ormap ⊥? vals) ⊥]
       [else (abstract-eval-syntax #'body (env-prime))])]
-    [(letrec ~! ([var:id val-expr:expr] ...) body)
+    [(letrec ~! ([var val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(var ...)))
                  "duplicate identifier"
      (define env-prime
@@ -94,7 +104,7 @@
              [val (in-stream vals)])
          (placeholder-set! (environment-ref env-prime var) val))
        (abstract-eval-syntax #'body (make-reader-graph env-prime))])]
-    [(proc-expr:expr arg-expr:expr ...)
+    [(proc-expr arg-expr ...)
      (define proc (abstract-eval-syntax #'proc-expr env))
      (define args
        (for/stream ([arg-expr (in-syntax #'(arg-expr ...))])
