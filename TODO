@@ -1,9 +1,0 @@
-- Implement backtracking
-- Implement fixpoint iteration
-- Add more primitive procedures
-- Add error information to bottom values
-- Add contract checks to lifted procedures
-- Make algorithm generic in terms of the analysis domain
-- Replace `make-base-environment` with `syntax->value`
-- Check performance impact of using contracts (especially `abstract?`)
-- Replace streams with exceptions?
