@@ -18,15 +18,6 @@
 
 ; TODO: Double check there isn't a risk that this goes into an
 ; infinite loop when both arguments are recursive procedures
-(define (closure=? clo1 clo2)
-  (cond
-   [(eq? clo1 clo2) #t]
-   [else (and (eq? (closure-lambda clo1) (closure-lambda clo2))
-              (environment=? (closure-environment clo1)
-                             (closure-environment clo2)))]))
-
-; TODO: Double check there isn't a risk that this goes into an
-; infinite loop when both arguments are recursive procedures
 (define (closure<=? clo1 clo2)
   (cond
    [(eq? clo1 clo2) #t]
@@ -49,12 +40,6 @@
 ; Ordering of environments
 ; ------------------------
 
-(define (environment=? env1 env2)
-  (define vars (set-union (hash-keys env1) (hash-keys env2)))
-  (for/and ([var (in-list vars)])
-    (value=? (hash-ref env1 var ⊥)
-             (hash-ref env2 var ⊥))))
-
 (define (environment<=? env1 env2)
   (define vars (set-union (hash-keys env1) (hash-keys env2)))
   (for/and ([var (in-list vars)])
@@ -67,14 +52,6 @@
 ; --------------------------------------
 ; Ordering of abstract values in general
 ; --------------------------------------
-
-(define (value=? v1 v2)
-  (cond
-   [(eq? v1 v2) #t]
-   [(or (procedure? v1) (procedure? v2)) #f]
-   [(and (closure? v1) (closure? v2)) (closure=? v1 v2)]
-   [(or (closure? v1) (closure? v2)) #f]
-   [else (type=? v1 v2)]))
 
 (define (value<=? v1 v2)
   (cond
@@ -166,7 +143,7 @@
 
 (define (iterate-fixpoint proc init)
   (define result (proc init))
-  (if (value=? result init)
+  (if (value<=? result init)
       result
       (iterate-fixpoint proc result)))
 
