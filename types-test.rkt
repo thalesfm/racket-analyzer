@@ -42,6 +42,7 @@
 (check-descending (list Number Real Rational Integer Exact-Nonnegative-Integer))
 
 ;; Checks for numeric literals
+(check-eq? (type<=? 4 5) #f)
 (check-eq? (type<=? 10 Exact-Nonnegative-Integer) #t)
 (check-eq? (type<=? 10.0 Integer) #t)
 (check-eq? (type<=? -999 Integer) #t)
@@ -72,47 +73,47 @@
 (check-eq? (type<=? (Pairof 1 (Pairof 2 Null)) (Listof Number)) #t)
 ;;(check-eq? (type<=? (Pairof 1 (Pairof 2 Null)) (Listof String)) #f)
 
-;; Test cases for `lub`
+;; Test cases for `type-lub`
 
 ;; Checks for `Top`
-(check-equal? (lub 10 Top) Top)
-(check-equal? (lub Top 10) Top)
+(check-equal? (type-lub 10 Top) Top)
+(check-equal? (type-lub Top 10) Top)
 
 ;; Checks for `Bot`
-(check-equal? (lub 10 Bot) 10)
-(check-equal? (lub Bot 10) 10)
-(check-equal? (lub Bot Bot) Bot)
+(check-equal? (type-lub 10 Bot) 10)
+(check-equal? (type-lub Bot 10) 10)
+(check-equal? (type-lub Bot Bot) Bot)
 
-(check-equal? (lub 10 #t) Truthy)
-(check-equal? (lub 10 #f) Top)
+(check-equal? (type-lub 10 #t) Truthy)
+(check-equal? (type-lub 10 #f) Top)
 
 ;; Checks for `Char`, `String` and `Symbol`
-(check-equal? (lub #\a #\a) #\a)
-(check-equal? (lub #\a #\b) Char)
-(check-equal? (lub "hello" "hello") "hello")
-(check-equal? (lub "hello" "hi") String)
-(check-equal? (lub 'a 'a) 'a)
-(check-equal? (lub 'a 'b) Symbol)
+(check-equal? (type-lub #\a #\a) #\a)
+(check-equal? (type-lub #\a #\b) Char)
+(check-equal? (type-lub "hello" "hello") "hello")
+(check-equal? (type-lub "hello" "hi") String)
+(check-equal? (type-lub 'a 'a) 'a)
+(check-equal? (type-lub 'a 'b) Symbol)
 
 ;; Checks for pairs and lists
-(check-equal? (lub (Pairof 1 2) (Pairof 1 #f)) (Pairof 1 Top))
-(check-equal? (lub (Pairof 1 2) (Pairof #f 2)) (Pairof Top 2))
-(check-equal? (lub #t (Pairof 1 2)) Truthy)
-(check-equal? (lub #f (Pairof 1 2)) Top)
+(check-equal? (type-lub (Pairof 1 2) (Pairof 1 #f)) (Pairof 1 Top))
+(check-equal? (type-lub (Pairof 1 2) (Pairof #f 2)) (Pairof Top 2))
+(check-equal? (type-lub #t (Pairof 1 2)) Truthy)
+(check-equal? (type-lub #f (Pairof 1 2)) Top)
 
-(check-equal? (lub Null Null) Null)
-(check-equal? (lub (Listof Number) (Listof Number)) (Listof Number))
-(check-equal? (lub (Listof 10) (Listof #f)) (Listof Top))
-(check-equal? (lub (Listof Number) Null) (Listof Number))
-(check-equal? (lub Null (Listof Number)) (Listof Number))
+(check-equal? (type-lub Null Null) Null)
+(check-equal? (type-lub (Listof Number) (Listof Number)) (Listof Number))
+(check-equal? (type-lub (Listof 10) (Listof #f)) (Listof Top))
+(check-equal? (type-lub (Listof Number) Null) (Listof Number))
+(check-equal? (type-lub Null (Listof Number)) (Listof Number))
 
-(check-equal? (lub (Pairof Number Null) Null) (Listof Number))
-(check-equal? (lub Null (Pairof Number Null)) (Listof Number))
-(check-equal? (lub (Pairof Number Null) (Listof Number)) (Listof Number))
-(check-equal? (lub (Listof Number) (Pairof Number Null)) (Listof Number))
-(check-equal? (lub (Pairof 1 (Pairof 2 Null)) (Listof Number)) (Listof Number))
-(check-equal? (lub (Listof Number) (Pairof 1 (Pairof 2 Null))) (Listof Number))
-(check-equal? (lub (Pairof 1 (Pairof 2 Null)) (Listof Top)) (Listof Top))
-(check-equal? (lub (Listof Top) (Pairof 1 (Pairof 2 Null))) (Listof Top))
-(check-equal? (lub (Pairof 1 2) (Listof Number)) Truthy)
-(check-equal? (lub (Listof Number) (Pairof 1 2)) Truthy)
+(check-equal? (type-lub (Pairof Number Null) Null) (Listof Number))
+(check-equal? (type-lub Null (Pairof Number Null)) (Listof Number))
+(check-equal? (type-lub (Pairof Number Null) (Listof Number)) (Listof Number))
+(check-equal? (type-lub (Listof Number) (Pairof Number Null)) (Listof Number))
+(check-equal? (type-lub (Pairof 1 (Pairof 2 Null)) (Listof Number)) (Listof Number))
+(check-equal? (type-lub (Listof Number) (Pairof 1 (Pairof 2 Null))) (Listof Number))
+(check-equal? (type-lub (Pairof 1 (Pairof 2 Null)) (Listof Top)) (Listof Top))
+(check-equal? (type-lub (Listof Top) (Pairof 1 (Pairof 2 Null))) (Listof Top))
+(check-equal? (type-lub (Pairof 1 2) (Listof Number)) Truthy)
+(check-equal? (type-lub (Listof Number) (Pairof 1 2)) Truthy)

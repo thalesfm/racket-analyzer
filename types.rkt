@@ -22,6 +22,7 @@
   [type?         (-> any/c boolean?)]
   [datum->type   (-> any/c type?)]
   [type->datum   (-> type? any/c)]
+  [type=?        (-> type? type? boolean?)]
   [type<=?       (-> type? type? boolean?)]
   [type-lub      (-> type? type? type?)]
   [rename datum->type α (-> any/c type?)]
@@ -133,6 +134,7 @@
 
   [(t1 t2) #:when (type=? t1 t2) #t]
   ;; TODO: Check if this still makes sense
+  [(t1 t2) #:when (and (literal-type? t1) (literal-type? t2)) #f]
   [(t1 t2) #:when (or (literal-type? t1) (literal-type? t2))
    (type<=? (if (literal-type? t1) (super t1) t1)
             (if (literal-type? t2) (super t2) t2))]
