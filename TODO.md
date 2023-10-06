@@ -1,6 +1,5 @@
 ## Requirements for MVP
 
-- Implement (simple) fixpoint iteration for recursive procedures
 - Implement backtracking for recursive procedure calls
 
 ## Requirements for program verification
@@ -10,6 +9,7 @@
 
 ## Nice-to-haves
 
+- Limit evaluation time for unit tests
 - Implement fixpoint iteration more efficiently (i.e. avoid unless necessary)
 - Make the algorithm generic in terms of the analysis domain
     - Parameterize with procedures like `syntax->value`, `<=?` and `lub`

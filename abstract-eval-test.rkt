@@ -5,6 +5,8 @@
          "environment.rkt"
          "types.rkt")
 
+(current-namespace (make-base-namespace))
+
 (check-equal? (abstract-eval 10) 10)
 (check-equal? (abstract-eval '(let ([x 10]) x)) 10)
 (check-equal? (abstract-eval '(let ([x 'not-ok]) (let ([x 'ok]) x))) 'ok)
@@ -26,20 +28,19 @@
  (lambda ()
    (abstract-eval '(let ([x 10] [x 11]) x))))
 
-; FIXME: Goes into an infinite loop because of `trace` (regression)
-#;(check-equal?
+; FIXME: Evaluates to T because we don't check primitive contracts
+(check-equal?
  (abstract-eval
   '(letrec ([fac (lambda (n) (if (= n 0) 1 (* n (fac (- n 1)))))])
      (fac 5)))
- 120)
+ Exact-Nonnegative-Integer)
 
-; FIXME: Goes into an infinite loop because of `trace` (regression)
-#;(check-equal?
+(check-equal?
  (abstract-eval
   '(letrec ([even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))]
             [odd? (lambda (n) (if (= n 0) #f (even? (- n 1))))])
      (even? 101)))
- #f)
+ T)
 
 (check-eq? (abstract-eval '(read)) Top)
 (check-eq? (abstract-eval '(+ (read) 10)) Top)

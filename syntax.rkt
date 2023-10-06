@@ -21,8 +21,8 @@
   #:description "literal"
   #:no-delimit-cut
   #:literals (quote)
-  (pattern datum-stx:atomic-datum)
-  (pattern (quote ~! datum-stx)))
+  (pattern datum:atomic-datum)
+  (pattern (quote ~! datum)))
 
 (define-syntax-class lambda-expr
   #:description "lambda expression"
