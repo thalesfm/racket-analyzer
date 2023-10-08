@@ -4,19 +4,20 @@
 
 (require syntax/strip-context
         "environment.rkt"
-         "types.rkt")
+        "ordering.rkt"
+        "types.rkt")
 
 (define (constant? v)
-  (if (pair? v)
-      (and (literal-type? (car v))
-           (literal-type? (cdr v)))
-      (literal-type? v)))
+  (if (Pairof? v)
+      (and (Literal? (car v))
+           (Literal? (cdr v)))
+      (Literal? v)))
 
 (define (lift proc)
   (lambda args
     (if (andmap constant? args)
-        (apply proc args)
-        Top)))
+        (datum->type (apply proc (map Literal-value args)))
+        T)))
 
 (define (make-base-environment)
   (let* ([Γ (make-empty-environment)]
@@ -25,6 +26,7 @@
          [Γ (environment-set Γ (strip-context #'*) (lift *))]
          [Γ (environment-set Γ (strip-context #'/) (lift /))]
          [Γ (environment-set Γ (strip-context #'=) (lift =))]
-         [Γ (environment-set Γ (strip-context #'read) (λ () Top))]
-         [Γ (environment-set Γ (strip-context #'error) (λ () Bot))])
+         [Γ (environment-set Γ (strip-context #'map) (lift map))]
+         [Γ (environment-set Γ (strip-context #'read) (λ () T))]
+         [Γ (environment-set Γ (strip-context #'error) (λ () ⊥))])
     Γ))

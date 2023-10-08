@@ -21,3 +21,6 @@
 - Implement more primitive procedures
 - Check performance impact of using contracts?
 - Replace streams with exceptions for error handling?
+- Make it so higher-order primitive procedures work with the analysis?
+    - Make closures callable using `prop:procedure`
+    - Pass the `trace` argument around implicitly as a parameter

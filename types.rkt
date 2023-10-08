@@ -1,70 +1,74 @@
 #lang racket
 
-(provide (type-out Top) (rename-out [Top T] [Top? T?])
-         (type-out Bot) (rename-out [Bot ⊥] [Bot? ⊥?])
-         (type-out Truthy)
-         (type-out Char)
-         (type-out String)
-         (type-out Symbol)
-         (type-out Void)
-         (type-out Number)
-         (type-out Real)
-         (type-out Rational)
-         (type-out Integer)
-         (type-out Exact-Nonnegative-Integer)
-         (type-out Null)
-         (type-out Pairof)
-         (type-out Listof))
+(provide (struct-out Truthy)
+         (struct-out Literal)
+         (struct-out Char)
+         (struct-out Null)
+         (struct-out String)
+         (struct-out Symbol)
+         (struct-out Void)
+         (struct-out Number)
+         (struct-out Real)
+         (struct-out Rational)
+         (struct-out Integer)
+         (struct-out Exact-Nonnegative-Integer)
+         (struct-out Pairof)
+         (struct-out Listof))
 
 (provide
  (contract-out
-  [literal-type? (-> any/c boolean?)]
   [type?         (-> any/c boolean?)]
   [datum->type   (-> any/c type?)]
   [type->datum   (-> type? any/c)]
-  [type=?        (-> type? type? boolean?)]
   [type<=?       (-> type? type? boolean?)]
-  [type-lub      (-> type? type? type?)]
-  [rename datum->type α (-> any/c type?)]
-  [rename type->datum γ (-> type? any/c)]))
+  [type-lub      (-> type? type? type?)]))
 
-(require "types-base.rkt")
+(require "ordering.rkt")
 
-(define-base-type Top)
-(define-base-type Bot)
+(struct type ()
+        #:transparent
+        #:methods gen:dcpo
+        [(define (gen-<=? dcpo other)
+           (if (type? other) (type<=? dcpo other) #f))
+         (define (gen-lub dcpo other)
+           (if (type? other) (type-lub dcpo other) T))])
 
-(define-base-type Truthy)
+
+;(define-base-type Top)
+;(define-base-type Bot)
+
+(struct Truthy type () #:transparent)
+
+(struct Literal type (value) #:transparent)
+
+(struct Char type () #:transparent)
+(struct Null type () #:transparent)
+(struct String type () #:transparent)
+(struct Symbol type () #:transparent)
+(struct Void type () #:transparent)
 
 ;; No boolean datatype because we have `Truthy`
-(define-base-type Char)
-(define-base-type String)
-(define-base-type Symbol)
-(define-base-type Void)
 ;; Ommited built-in datatypes: bytes, byte strings, keywords, vectors,
 ;; hash tables, boxes, and undefined (as well as user defined structs)
 
-(define-base-type Number)
-(define-base-type Real)
-(define-base-type Rational)
-(define-base-type Integer)
-(define-base-type Exact-Nonnegative-Integer)
+(struct Number type () #:transparent)
+(struct Real type () #:transparent)
+(struct Rational type () #:transparent)
+(struct Integer type () #:transparent)
+(struct Exact-Nonnegative-Integer type () #:transparent)
 
 ;; TODO: Check that arguments are `type?` when invoked
-(define-base-type Null)
-(define-type-constructor Pairof #:arity 2)
-(define-type-constructor Listof #:arity 1)
+(struct Pairof type (car cdr) #:transparent)
+(struct Listof type (element) #:transparent)
 ;; (define-type List (Listof Top))
 
-(define literal-type?
+(define check-literal
   (disjoin boolean? number? char? string? symbol?))
 
-(define (type? v)
-  (or (base-type? v) (type-ctor? v) (literal-type? v)))
-
 (define/match (datum->type v)
-  [(v) #:when (literal-type? v) v]
-  [((? void?)) Void]
-  [((? null?)) Null]
+  [(v) #:when (check-literal v) (Literal v)]
+  [((? void?)) (Void)]
+  [((? null?)) (Null)]
   [((cons a d))
    (Pairof (datum->type a)
            (datum->type d))]
@@ -72,12 +76,12 @@
    (raise-arguments-error 'datum->type "unsuported datum" "v" v)])
 
 (define/match (type->datum t)
-  [(t) #:when (literal-type? t) t]
-  [((== Void)) (void)]
-  [((== Null)) null]
-  [((Pairof a d))
-   (cons (type->datum a)
-         (type->datum d))]
+  [((Literal v)) v]
+  [((Void)) (void)]
+  [((Null)) null]
+  [((Pairof car cdr))
+   (cons (type->datum car)
+         (type->datum cdr))]
   [(t)
    (raise-arguments-error 'type->datum "type can't be concretized" "τ" t)])
 
@@ -85,45 +89,43 @@
 ;; returns false when none (or multiple) exist
 (define (super t)
   (match t
-    [#f Top]
-    [#t Truthy]
+    [(Literal #f) T]
+    [(Literal #t) (Truthy)]
 
-    [(? char?)     Char]
-    [(? string?)   String]
-    [(? symbol?)   Symbol]
-    [(? void?)     Void]
+    [(Literal (? char?))     (Char)]
+    [(Literal (? string?))   (String)]
+    [(Literal (? symbol?))   (Symbol)]
+    [(Literal (? void?))     (Void)]
 
-    [(? exact-nonnegative-integer?) Exact-Nonnegative-Integer]
-    [(? integer?)  Integer]
-    [(? rational?) Rational]
-    [(? real?)     Real]
-    [(? number?)   Number]
+    [(Literal (? exact-nonnegative-integer?))
+     (Exact-Nonnegative-Integer)]
+    [(Literal (? integer?))  (Integer)]
+    [(Literal (? rational?)) (Rational)]
+    [(Literal (? real?))     (Real)]
+    [(Literal (? number?))   (Number)]
 
-    [(== Char)     Truthy]
-    [(== String)   Truthy]
-    [(== Symbol)   Truthy]
-    [(== Void)     Truthy]
+    [(Char)     (Truthy)]
+    [(String)   (Truthy)]
+    [(Symbol)   (Truthy)]
+    [(Void)     (Truthy)]
 
-    [(== Truthy)   Top]
-    [(== Number)   Truthy]
-    [(== Real)     Number]
-    [(== Rational) Real]
-    [(== Integer)  Rational]
-    [(== Exact-Nonnegative-Integer) Integer]
+    [(Truthy)   T]
+    [(Number)   (Truthy)]
+    [(Real)     (Number)]
+    [(Rational) (Real)]
+    [(Integer)  (Rational)]
+    [(Exact-Nonnegative-Integer) (Integer)]
 
-    [(== Null) (Listof Bot)]
+    [(Null) (Listof ⊥)]
     [(Listof t) (=> next)
      (let ([sup (super t)])
        (if sup (Listof sup) (next)))]
 
     [_ #f]))
 
-(define (type=? t1 t2)
-  (equal? t1 t2))
-
 (define/match (type<=? t1 t2)
-  [(_        (== Top)) #t]
-  [((== Bot) _       ) #t]
+  [(_        (== T)) #t]
+  [((== ⊥) _       ) #t]
 
   [((== Null)      (Listof _ )   ) #t]
   [((Listof t1)    (Listof t2)   ) (type<=? t1 t2)]
@@ -132,12 +134,10 @@
   [((Pairof a1 d1) (Pairof a2 d2)) (and (type<=? a1 a2)
                                         (type<=? d1 d2))]
 
-  [(t1 t2) #:when (type=? t1 t2) #t]
-  ;; TODO: Check if this still makes sense
-  [(t1 t2) #:when (and (literal-type? t1) (literal-type? t2)) #f]
-  [(t1 t2) #:when (or (literal-type? t1) (literal-type? t2))
-   (type<=? (if (literal-type? t1) (super t1) t1)
-            (if (literal-type? t2) (super t2) t2))]
+  [(t1 t2) #:when (equal? t1 t2) #t]
+  [((Literal _) (Literal _)) #f]
+  [((Literal _) _) (type<=? (super t1) t2)]
+  [(_ (Literal _)) (type<=? t1 (super t2))]
   [(t1 t2) (=> next)
    (let ([sup (super t1)])
      (if sup (type<=? sup t2) (next)))]
@@ -145,32 +145,32 @@
   [(_  _ ) #f])
 
 (define/match (type-lub t1 t2)
-  [((== Top) _       ) Top]
-  [(_        (== Top)) Top]
-  [((== Bot) t       ) t]
-  [(t        (== Bot)) t]
+  [((== T) _       ) T]
+  [(_        (== T)) T]
+  [((== ⊥) t       ) t]
+  [(t        (== ⊥)) t]
 
   [((Listof t1)    (Listof t2)   ) (Listof (type-lub t1 t2))]
   [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (type-lub a1 a2) (type-lub d1 d2))]
-  [((Pairof a  d ) (== Null)     ) (type-lub (Pairof a d) (Listof Bot))]
-  [((== Null)      (Pairof a  d )) (type-lub (Pairof a d) (Listof Bot))]
+  [((Pairof a  d ) (Null)        ) (type-lub (Pairof a d) (Listof ⊥))]
+  [((Null)         (Pairof a  d )) (type-lub (Pairof a d) (Listof ⊥))]
   [((Pairof a  d ) (Listof t )   )
    (match (type-lub d (Listof t))
      [(Listof t*) (Listof (type-lub a t*))]
-     [_           Truthy])]
+     [_           (Truthy)])]
   [((Listof t )    (Pairof a  d ))
    (match (type-lub d (Listof t))
      [(Listof t*) (Listof (type-lub a t*))]
-     [_           Truthy])]
+     [_           (Truthy)])]
 
   ;; These cases are reduntant but avoid expensive `type<=?` comparisons
-  [((Pairof _  _ ) t             ) (if t Truthy Top)]
-  [(t              (Pairof _  _ )) (if t Truthy Top)]
+  [((Pairof _  _ ) t             ) (if t (Truthy) T)]
+  [(t              (Pairof _  _ )) (if t (Truthy) T)]
 
   [(t1 t2) #:when (equal?  t1 t2) t1]
-  [(t1 t2) #:when (or (literal-type? t1) (literal-type? t2))
-   (type-lub (if (literal-type? t1) (super t1) t1)
-        (if (literal-type? t2) (super t2) t2))]
+  [((Literal _) (Literal _)) (type-lub (super t1) (super t2))]
+  [((Literal _) _          ) (type-lub (super t1) t2)]
+  [(_           (Literal _)) (type-lub t1         (super t2))]
   [(t1 t2) #:when (type<=? t1 t2) t2]
   [(t1 t2) #:when (type<=? t2 t1) t1]
-  [(t1 t2) (if (and t1 t2) Truthy Top)])
+  [(t1 t2) (Truthy)])
