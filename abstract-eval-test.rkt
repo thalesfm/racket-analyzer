@@ -82,7 +82,7 @@
         (if (read)
             (c 10)
             (c 10)))))
-  'x)
+  #'x)
  (datum->type 10))
 
 (check-true
@@ -94,7 +94,7 @@
          (if (read)
              (c 10)
              (c 11)))))
-   'x)
+   #'x)
   (Number)))
 
 (check-equal?

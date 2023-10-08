@@ -30,5 +30,5 @@
 
 ; TODO: Provide default implementation for dictionaries
 (define-generics dcpo
-  (gen-<=? dcpo other)
-  (gen-lub dcpo other))
+  (gen-<=? dcpo v)
+  (gen-lub dcpo v))

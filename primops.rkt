@@ -2,10 +2,9 @@
 
 (provide make-base-environment)
 
-(require syntax/strip-context
-        "environment.rkt"
-        "ordering.rkt"
-        "types.rkt")
+(require "environment.rkt"
+         "ordering.rkt"
+         "types.rkt")
 
 (define (constant? v)
   (if (Pairof? v)
@@ -21,12 +20,12 @@
 
 (define (make-base-environment)
   (let* ([Γ (make-empty-environment)]
-         [Γ (environment-set Γ (strip-context #'+) (lift +))]
-         [Γ (environment-set Γ (strip-context #'-) (lift -))]
-         [Γ (environment-set Γ (strip-context #'*) (lift *))]
-         [Γ (environment-set Γ (strip-context #'/) (lift /))]
-         [Γ (environment-set Γ (strip-context #'=) (lift =))]
-         [Γ (environment-set Γ (strip-context #'map) (lift map))]
-         [Γ (environment-set Γ (strip-context #'read) (λ () T))]
-         [Γ (environment-set Γ (strip-context #'error) (λ () ⊥))])
+         [Γ (environment-set Γ #'+ (lift +))]
+         [Γ (environment-set Γ #'- (lift -))]
+         [Γ (environment-set Γ #'* (lift *))]
+         [Γ (environment-set Γ #'/ (lift /))]
+         [Γ (environment-set Γ #'= (lift =))]
+         [Γ (environment-set Γ #'map (lift map))]
+         [Γ (environment-set Γ #'read (λ () T))]
+         [Γ (environment-set Γ #'error (λ () ⊥))])
     Γ))

@@ -2,7 +2,8 @@
 
 (provide free-vars)
 
-(require syntax/parse
+(require syntax/id-set
+         syntax/parse
          syntax/stx
          "syntax.rkt")
 
@@ -15,25 +16,26 @@
              (lambda () (compute-free-vars stx))))
 
 (define (compute-free-vars stx)
+  (define id-set immutable-free-id-set)
   (syntax-parse stx
     #:conventions (conventions)
     #:literal-sets (literal-set)
-    [var (set (syntax-e #'var))]
-    [lit (set)]
-    [lam
-     (define arg-ids (list->set (stx-map syntax-e #'(lam.arg-id ...))))
+    [var (id-set (list #'var))]
+    [lit:literal (id-set)]
+    [lam:lambda-expr
+     (define arg-ids (id-set (syntax->list #'(lam.arg-id ...))))
      (set-subtract (free-vars #'lam.body) arg-ids)]
     [(if ~! expr1 expr2 expr3)
      (set-union (free-vars #'expr1)
                 (free-vars #'expr2)
                 (free-vars #'expr3))]
-    [(let ~! ([var:id val-expr] ...) body)
-     (define bound-vars (list->set (stx-map syntax-e #'(var ...))))
+    [(let ~! ([var val-expr] ...) body)
+     (define bound-vars (id-set (syntax->list #'(var ...))))
      (apply set-union
             (set-subtract (free-vars #'body) bound-vars)
             (stx-map free-vars #'(val-expr ...)))]
-    [(letrec ~! ([var:id val-expr] ...) body)
-     (define bound-vars (list->set (stx-map syntax-e #'(var ...))))
+    [(letrec ~! ([var val-expr] ...) body)
+     (define bound-vars (id-set (syntax->list #'(var ...))))
      (set-subtract
        (apply set-union
               (free-vars #'body)
