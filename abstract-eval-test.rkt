@@ -2,11 +2,18 @@
 
 (require rackunit
          "abstract-eval.rkt"
+         "closure.rkt"
          "environment.rkt"
-         "ordering.rkt"
+         (prefix-in domain: "domain.rkt")
          "types.rkt")
 
 (current-namespace (make-base-namespace))
+
+(define abstract-eval
+  (make-abstract-evaluator type-domain datum->type))
+
+(define T (domain:T type-domain))
+(define ⊥ (domain:⊥ type-domain))
 
 (check-equal? (abstract-eval 10) (datum->type 10))
 (check-equal? (abstract-eval '(let ([x 10]) x)) (datum->type 10))
@@ -53,7 +60,10 @@
 (check-equal? (abstract-eval '(if #t 'ok (read))) (datum->type 'ok))
 (check-equal? (abstract-eval '(if #f (read) 'ok)) (datum->type 'ok))
 (check-equal? (abstract-eval '(if (read) 10 10)) (datum->type 10))
-(check-true (<=? (abstract-eval '(if (read) 10 11)) (Number)))
+(check-true
+ (domain:<=? type-domain
+             (abstract-eval '(if (read) 10 11))
+             (Number)))
 
 (check-equal? (abstract-eval '(error)) ⊥)
 (check-equal? (abstract-eval '(let ([x (error)]) 'unused)) ⊥)
@@ -86,7 +96,8 @@
  (datum->type 10))
 
 (check-true
- (<=?
+ (domain:<=?
+  type-domain
   (environment-ref
    (closure-environment
     (abstract-eval

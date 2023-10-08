@@ -1,6 +1,8 @@
 #lang racket
 
-(provide (struct-out Truthy)
+(provide (struct-out Top)
+         (struct-out Bot)
+         (struct-out Truthy)
          (struct-out Literal)
          (struct-out Char)
          (struct-out Null)
@@ -13,7 +15,8 @@
          (struct-out Integer)
          (struct-out Exact-Nonnegative-Integer)
          (struct-out Pairof)
-         (struct-out Listof))
+         (struct-out Listof)
+         type-domain)
 
 (provide
  (contract-out
@@ -23,19 +26,12 @@
   [type<=?       (-> type? type? boolean?)]
   [type-lub      (-> type? type? type?)]))
 
-(require "ordering.rkt")
+(require "domain.rkt")
 
-(struct type ()
-        #:transparent
-        #:methods gen:dcpo
-        [(define (gen-<=? dcpo other)
-           (if (type? other) (type<=? dcpo other) #f))
-         (define (gen-lub dcpo other)
-           (if (type? other) (type-lub dcpo other) T))])
+(struct type () #:transparent)
 
-
-;(define-base-type Top)
-;(define-base-type Bot)
+(struct Top type () #:transparent)
+(struct Bot type () #:transparent)
 
 (struct Truthy type () #:transparent)
 
@@ -89,7 +85,7 @@
 ;; returns false when none (or multiple) exist
 (define (super t)
   (match t
-    [(Literal #f) T]
+    [(Literal #f) (Top)]
     [(Literal #t) (Truthy)]
 
     [(Literal (? char?))     (Char)]
@@ -109,14 +105,14 @@
     [(Symbol)   (Truthy)]
     [(Void)     (Truthy)]
 
-    [(Truthy)   T]
+    [(Truthy)   (Top)]
     [(Number)   (Truthy)]
     [(Real)     (Number)]
     [(Rational) (Real)]
     [(Integer)  (Rational)]
     [(Exact-Nonnegative-Integer) (Integer)]
 
-    [(Null) (Listof ⊥)]
+    [(Null) (Listof (Bot))]
     [(Listof t) (=> next)
      (let ([sup (super t)])
        (if sup (Listof sup) (next)))]
@@ -124,8 +120,8 @@
     [_ #f]))
 
 (define/match (type<=? t1 t2)
-  [(_        (== T)) #t]
-  [((== ⊥) _       ) #t]
+  [(_ (Top)) #t]
+  [((Bot) _) #t]
 
   [((== Null)      (Listof _ )   ) #t]
   [((Listof t1)    (Listof t2)   ) (type<=? t1 t2)]
@@ -145,15 +141,15 @@
   [(_  _ ) #f])
 
 (define/match (type-lub t1 t2)
-  [((== T) _       ) T]
-  [(_        (== T)) T]
-  [((== ⊥) t       ) t]
-  [(t        (== ⊥)) t]
+  [((Top) _       ) (Top)]
+  [(_        (Top)) (Top)]
+  [((Bot)    _    ) t2]
+  [(_        (Bot)) t1]
 
   [((Listof t1)    (Listof t2)   ) (Listof (type-lub t1 t2))]
   [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (type-lub a1 a2) (type-lub d1 d2))]
-  [((Pairof a  d ) (Null)        ) (type-lub (Pairof a d) (Listof ⊥))]
-  [((Null)         (Pairof a  d )) (type-lub (Pairof a d) (Listof ⊥))]
+  [((Pairof a  d ) (Null)        ) (type-lub (Pairof a d) (Listof (Bot)))]
+  [((Null)         (Pairof a  d )) (type-lub (Pairof a d) (Listof (Bot)))]
   [((Pairof a  d ) (Listof t )   )
    (match (type-lub d (Listof t))
      [(Listof t*) (Listof (type-lub a t*))]
@@ -164,8 +160,8 @@
      [_           (Truthy)])]
 
   ;; These cases are reduntant but avoid expensive `type<=?` comparisons
-  [((Pairof _  _ ) t             ) (if t (Truthy) T)]
-  [(t              (Pairof _  _ )) (if t (Truthy) T)]
+  [((Pairof _  _ ) t             ) (if t (Truthy) (Top))]
+  [(t              (Pairof _  _ )) (if t (Truthy) (Top))]
 
   [(t1 t2) #:when (equal?  t1 t2) t1]
   [((Literal _) (Literal _)) (type-lub (super t1) (super t2))]
@@ -174,3 +170,6 @@
   [(t1 t2) #:when (type<=? t1 t2) t2]
   [(t1 t2) #:when (type<=? t2 t1) t1]
   [(t1 t2) (Truthy)])
+
+(define type-domain
+  (make-domain type? type<=? type-lub (Top)))

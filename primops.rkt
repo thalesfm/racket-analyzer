@@ -3,7 +3,7 @@
 (provide make-base-environment)
 
 (require "environment.rkt"
-         "ordering.rkt"
+         "domain.rkt"
          "types.rkt")
 
 (define (constant? v)
@@ -16,16 +16,16 @@
   (lambda args
     (if (andmap constant? args)
         (datum->type (apply proc (map Literal-value args)))
-        T)))
+        (Top))))
 
 (define (make-base-environment)
-  (let* ([Γ (make-empty-environment)]
-         [Γ (environment-set Γ #'+ (lift +))]
-         [Γ (environment-set Γ #'- (lift -))]
-         [Γ (environment-set Γ #'* (lift *))]
-         [Γ (environment-set Γ #'/ (lift /))]
-         [Γ (environment-set Γ #'= (lift =))]
-         [Γ (environment-set Γ #'map (lift map))]
-         [Γ (environment-set Γ #'read (λ () T))]
-         [Γ (environment-set Γ #'error (λ () ⊥))])
-    Γ))
+  (let* ([env (make-empty-environment)]
+         [env (environment-set env #'+ (lift +))]
+         [env (environment-set env #'- (lift -))]
+         [env (environment-set env #'* (lift *))]
+         [env (environment-set env #'/ (lift /))]
+         [env (environment-set env #'= (lift =))]
+         [env (environment-set env #'map (lift map))]
+         [env (environment-set env #'read (λ () (Top)))]
+         [env (environment-set env #'error (λ () (⊥ type-domain)))])
+    env))
