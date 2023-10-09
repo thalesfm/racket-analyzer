@@ -3,10 +3,10 @@
 (provide abstract-eval
          abstract-eval-syntax)
 
-(require syntax/parse
+(require syntax/free-vars
+         syntax/parse
          "common.rkt"
          "environment.rkt"
-         "free-vars.rkt"
          "syntax.rkt")
 
 (struct closure (lambda environment) #:transparent)
@@ -69,7 +69,7 @@
     [(#%plain-lambda (id ...) body)
      (define captured-env
        (for/fold ([acc (make-empty-environment)])
-                 ([var (free-vars stx)])
+                 ([var (free-vars stx #:module-bound? #t)])
          (environment-set acc var (environment-ref env var ⊥))))
      (closure stx captured-env)]
     [(case-lambda . _) (error "case-lambda not supported")]
