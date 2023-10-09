@@ -7,8 +7,7 @@
          "common.rkt"
          "environment.rkt"
          "free-vars.rkt"
-         "syntax.rkt"
-         "types.rkt")
+         "syntax.rkt")
 
 (struct closure (lambda environment) #:transparent)
 
@@ -55,50 +54,25 @@
    [(or  (closure? v1) (closure? v2)) T]
    [else ((property-combine) v1 v2 lub)]))
 
-; HACK
-(define (constant? v)
-  (if (Pairof? v)
-      (and (Literal? (car v))
-           (Literal? (cdr v)))
-      (Literal? v)))
-
-; HACK
-(define (lift proc)
-  (lambda args
-    (if (andmap constant? args)
-        (datum->type (apply proc (map Literal-value args)))
-        T)))
-
-; HACK
-(define (make-base-environment)
-  (let* ([env (make-empty-environment)]
-         [env (environment-set env #'+ (lift +))]
-         [env (environment-set env #'- (lift -))]
-         [env (environment-set env #'* (lift *))]
-         [env (environment-set env #'/ (lift /))]
-         [env (environment-set env #'= (lift =))]
-         [env (environment-set env #'map (lift map))]
-         [env (environment-set env #'read (λ () T))]
-         [env (environment-set env #'error (λ () ⊥))])
-    env))
-
-(define (abstract-eval expr [namespace (current-namespace)])
+(define (abstract-eval expr
+                       [namespace (current-namespace)]
+                       [env (make-empty-environment)])
   (define stx (namespace-syntax-introduce (datum->syntax #f expr) namespace))
-  (define env (make-base-environment))
-  (abstract-eval-syntax stx env))
+  (abstract-eval-syntax (expand stx) env))
 
 (define (abstract-eval-syntax stx env [trace (hasheq)])
   (syntax-parse stx
     #:conventions (conventions)
-    #:literal-sets (literal-set)
-    [var (environment-ref env #'var ⊥)]
-    [lit:literal ((property-from-syntax) #'lit.datum)]
-    [lam:lambda-expr
+    #:literal-sets (kernel-literals)
+    [(#%expression expr) (abstract-eval-syntax #'expr env trace)]
+    [id (environment-ref env #'id ⊥)]
+    [(#%plain-lambda (id ...) body)
      (define captured-env
        (for/fold ([acc (make-empty-environment)])
-                 ([var (free-vars #'lam)])
+                 ([var (free-vars stx)])
          (environment-set acc var (environment-ref env var ⊥))))
-     (closure #'lam captured-env)]
+     (closure stx captured-env)]
+    [(case-lambda . _) (error "case-lambda not supported")]
     [(if ~! test-expr then-expr else-expr)
      (define test-val (abstract-eval-syntax #'test-expr env trace))
      ;; FIXME: Not general!
@@ -111,26 +85,28 @@
        (abstract-eval-syntax #'else-expr env trace)]
       [else
        (abstract-eval-syntax #'then-expr env trace)])]
-    [(let ~! ([var val-expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(var ...)))
+    [(begin . _) (error "begin not supported")]
+    [(begin0 . _) (error "begin0 not supported")]
+    [(let-values ~! ([(id) val-expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
      (define vals
        (for/stream ([val-expr (in-syntax #'(val-expr ...))])
          (abstract-eval-syntax val-expr env trace)))
      (define (env-prime)
        (for/fold ([acc env])
-                 ([var (in-syntax #'(var ...))]
+                 ([var (in-syntax #'(id ...))]
                   [val (in-stream vals)])
          (environment-set acc var val)))
      (cond
       [(stream-ormap ⊥? vals) ⊥]
       [else (abstract-eval-syntax #'body (env-prime) trace)])]
-    [(letrec ~! ([var val-expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(var ...)))
+    [(letrec-values ~! ([(id) val-expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
      (define env-prime
        (for/fold ([acc env])
-                 ([var (in-syntax #'(var ...))])
+                 ([var (in-syntax #'(id ...))])
          (environment-set acc var (make-placeholder ⊥))))
      (define vals
        (for/stream ([val-expr (in-syntax #'(val-expr ...))])
@@ -138,18 +114,24 @@
      (cond
       [(stream-ormap ⊥? vals) ⊥]
       [else
-       (for ([var (in-syntax #'(var ...))]
+       (for ([var (in-syntax #'(id ...))]
              [val (in-stream vals)])
          (placeholder-set! (environment-ref env-prime var) val))
        (abstract-eval-syntax #'body (make-reader-graph env-prime) trace)])]
-    [(proc-expr arg-expr ...)
+    [(set! . _) (error "set! not supported")]
+    [(quote datum) ((property-from-syntax) #'datum)]
+    [(quote-syntax . _) (error "quote-syntax not supported")]
+    [(with-continuation-mark . _) (error "with-continuatio-mark not supported")]
+    [(#%plain-app proc-expr arg-expr ...)
      (define proc (abstract-eval-syntax #'proc-expr env trace))
      (define args
        (for/stream ([arg-expr (in-syntax #'(arg-expr ...))])
          (abstract-eval-syntax arg-expr env trace)))
      (cond
       [(or (⊥? proc) (stream-ormap ⊥? args)) ⊥]
-      [else (abstract-apply proc (stream->list args) trace)])]))
+      [else (abstract-apply proc (stream->list args) trace)])]
+    [(#%top . _) ⊥]
+    [(#%variable-reference . _) (error "#%variable-reference not supported")]))
 
 (define (iterate-fixpoint proc init)
   (define result (proc init))

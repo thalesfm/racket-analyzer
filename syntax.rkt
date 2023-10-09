@@ -11,6 +11,7 @@
   [var id]
   [lit literal]
   [lam lambda-expr]
+  [#rx"(^|-)id$" id]
   [#rx"(^|-)expr$" expr])
 
 (define-syntax-class atomic-datum
@@ -27,5 +28,5 @@
 (define-syntax-class lambda-expr
   #:description "lambda expression"
   #:no-delimit-cut
-  #:literals (lambda)
-  (pattern (lambda ~! (arg-id:id ...) body:expr)))
+  #:literals (#%plain-lambda)
+  (pattern (#%plain-lambda ~! (arg-id:id ...) body:expr)))

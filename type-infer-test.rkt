@@ -6,17 +6,6 @@
          "environment.rkt"
          "types.rkt")
 
-(define (infer-type expr)
-  (parameterize
-    ([property-from-syntax
-        (lambda (stx) (datum->type (syntax->datum stx)))]
-     [property-stronger?
-        (lambda (v1 v2 recur-proc) (type<=? v1 v2))]
-     [property-combine
-        (lambda (v1 v2 recur-proc) (type-lub v1 v2))])
-    (abstract-eval expr (make-base-namespace))))
-
-
 (check-equal? (infer-type 10) (datum->type 10))
 (check-equal? (infer-type '(let ([x 10]) x)) (datum->type 10))
 (check-equal?

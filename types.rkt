@@ -23,7 +23,12 @@
   [datum->type   (-> any/c type?)]
   [type->datum   (-> type? any/c)]
   [type<=?       (-> type? type? boolean?)]
-  [type-lub      (-> type? type? type?)]))
+  [type-lub      (-> type? type? type?)]
+  [infer-type    (-> any/c any)]))
+
+(require "abstract-eval.rkt"
+         "common.rkt"
+         "environment.rkt")
 
 (struct type () #:transparent)
 
@@ -167,3 +172,37 @@
   [(t1 t2) #:when (type<=? t1 t2) t2]
   [(t1 t2) #:when (type<=? t2 t1) t1]
   [(t1 t2) (Truthy)])
+
+(define (constant? v)
+  (if (Pairof? v)
+      (and (Literal? (car v))
+           (Literal? (cdr v)))
+      (Literal? v)))
+
+(define (lift proc)
+  (lambda args
+    (if (andmap constant? args)
+        (datum->type (apply proc (map Literal-value args)))
+        T)))
+
+(define (make-base-environment)
+  (let* ([env (make-empty-environment)]
+         [env (environment-set env #'+ (lift +))]
+         [env (environment-set env #'- (lift -))]
+         [env (environment-set env #'* (lift *))]
+         [env (environment-set env #'/ (lift /))]
+         [env (environment-set env #'= (lift =))]
+         [env (environment-set env #'map (lift map))]
+         [env (environment-set env #'read (λ () T))]
+         [env (environment-set env #'error (λ () ⊥))])
+    env))
+
+(define (infer-type expr)
+  (parameterize
+    ([property-from-syntax
+        (lambda (stx) (datum->type (syntax->datum stx)))]
+     [property-stronger?
+        (lambda (v1 v2 recur-proc) (type<=? v1 v2))]
+     [property-combine
+        (lambda (v1 v2 recur-proc) (type-lub v1 v2))])
+    (abstract-eval expr (make-base-namespace) (make-base-environment))))
