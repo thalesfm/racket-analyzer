@@ -1,5 +1,6 @@
 ## Requirements for MVP
 
+- Fix `letrec` regression (see failing test)
 - Implement backtracking for recursive procedure calls
 
 ## Requirements for program verification
@@ -11,7 +12,6 @@
 
 - Limit evaluation time for unit tests
 - Implement fixpoint iteration more efficiently (i.e. avoid unless necessary)
-- Replace `make-base-environment` with `syntax->value`?
 - Split monolithic analysis domain into smaller, simpler domains
     - Domain of constants (i.e. flat domain)
     - Domain of types

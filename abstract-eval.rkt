@@ -53,20 +53,23 @@
    [(or  (closure? v1) (closure? v2)) T]
    [else ((property-combine) v1 v2 lub)]))
 
-(define (abstract-eval expr
-                       [namespace (current-namespace)]
-                       [env (make-empty-environment)])
-  (define stx (namespace-syntax-introduce (datum->syntax #f expr) namespace))
-  (abstract-eval-syntax (expand stx) env))
+(define (abstract-eval expr [namespace (current-namespace)])
+  (parameterize ([current-namespace namespace])
+    (define stx (namespace-syntax-introduce (datum->syntax #f expr)))
+    (abstract-eval-syntax (expand stx))))
 
 (define-conventions id-suffix [#rx"(^|-)id$" id])
 (define-conventions expr-suffix [#rx"(^|-)expr$" expr])
 
-(define (abstract-eval-syntax stx env [trace (hasheq)])
+(define (abstract-eval-syntax stx
+                              [env (make-empty-environment)]
+                              [trace (hasheq)])
   (syntax-parse stx
     #:conventions (id-suffix expr-suffix)
     #:literal-sets (kernel-literals)
     [(#%expression expr) (abstract-eval-syntax #'expr env trace)]
+    [(~and id (~fail #:when (eq? (identifier-binding #'id) 'lexical)))
+     (namespace-variable-value (syntax-e #'id))]
     [id (environment-ref env #'id ⊥)]
     [(#%plain-lambda (arg-id ...) body)
      (define captured-env

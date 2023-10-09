@@ -185,17 +185,19 @@
         (datum->type (apply proc (map Literal-value args)))
         T)))
 
-(define (make-base-environment)
-  (let* ([env (make-empty-environment)]
-         [env (environment-set env #'+ (lift +))]
-         [env (environment-set env #'- (lift -))]
-         [env (environment-set env #'* (lift *))]
-         [env (environment-set env #'/ (lift /))]
-         [env (environment-set env #'= (lift =))]
-         [env (environment-set env #'map (lift map))]
-         [env (environment-set env #'read (λ () T))]
-         [env (environment-set env #'error (λ () ⊥))])
-    env))
+(define (make-namespace)
+  (define namespace (make-base-namespace))
+  (define (set-constant-value! sym v)
+    (namespace-set-variable-value! sym v #t namespace #t))
+  (set-constant-value! '+ (lift +))
+  (set-constant-value! '- (lift -))
+  (set-constant-value! '* (lift *))
+  (set-constant-value! '/ (lift /))
+  (set-constant-value! '= (lift =))
+  (set-constant-value! 'map (lift map))
+  (set-constant-value! 'read (lambda () T))
+  (set-constant-value! 'error (lambda () ⊥))
+  namespace)
 
 (define (infer-type expr)
   (parameterize
@@ -205,4 +207,4 @@
         (lambda (v1 v2 recur-proc) (type<=? v1 v2))]
      [property-combine
         (lambda (v1 v2 recur-proc) (type-lub v1 v2))])
-    (abstract-eval expr (make-base-namespace) (make-base-environment))))
+    (abstract-eval expr (make-namespace))))
