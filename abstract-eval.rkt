@@ -6,8 +6,7 @@
 (require syntax/free-vars
          syntax/parse
          "common.rkt"
-         "environment.rkt"
-         "syntax.rkt")
+         "environment.rkt")
 
 (struct closure (lambda environment) #:transparent)
 
@@ -60,19 +59,22 @@
   (define stx (namespace-syntax-introduce (datum->syntax #f expr) namespace))
   (abstract-eval-syntax (expand stx) env))
 
+(define-conventions id-suffix [#rx"(^|-)id$" id])
+(define-conventions expr-suffix [#rx"(^|-)expr$" expr])
+
 (define (abstract-eval-syntax stx env [trace (hasheq)])
   (syntax-parse stx
-    #:conventions (conventions)
+    #:conventions (id-suffix expr-suffix)
     #:literal-sets (kernel-literals)
     [(#%expression expr) (abstract-eval-syntax #'expr env trace)]
     [id (environment-ref env #'id ⊥)]
-    [(#%plain-lambda (id ...) body)
+    [(#%plain-lambda (arg-id ...) body)
      (define captured-env
        (for/fold ([acc (make-empty-environment)])
                  ([var (free-vars stx #:module-bound? #t)])
          (environment-set acc var (environment-ref env var ⊥))))
      (closure stx captured-env)]
-    [(case-lambda . _) (error "case-lambda not supported")]
+    [(case-lambda . _) (error "not implemented")]
     [(if ~! test-expr then-expr else-expr)
      (define test-val (abstract-eval-syntax #'test-expr env trace))
      ;; FIXME: Not general!
@@ -85,8 +87,8 @@
        (abstract-eval-syntax #'else-expr env trace)]
       [else
        (abstract-eval-syntax #'then-expr env trace)])]
-    [(begin . _) (error "begin not supported")]
-    [(begin0 . _) (error "begin0 not supported")]
+    [(begin expr ...) (error "not implemented")]
+    [(begin0 expr0 expr ...) (error "not implemented")]
     [(let-values ~! ([(id) val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
@@ -118,10 +120,10 @@
              [val (in-stream vals)])
          (placeholder-set! (environment-ref env-prime var) val))
        (abstract-eval-syntax #'body (make-reader-graph env-prime) trace)])]
-    [(set! . _) (error "set! not supported")]
+    [(set! id expr) (error "not implemented")]
     [(quote datum) ((property-from-syntax) #'datum)]
-    [(quote-syntax . _) (error "quote-syntax not supported")]
-    [(with-continuation-mark . _) (error "with-continuatio-mark not supported")]
+    [(quote-syntax datum) (error "not implemented")]
+    [(with-continuation-mark . _) (error "not implemented")]
     [(#%plain-app proc-expr arg-expr ...)
      (define proc (abstract-eval-syntax #'proc-expr env trace))
      (define args
@@ -130,8 +132,9 @@
      (cond
       [(or (⊥? proc) (stream-ormap ⊥? args)) ⊥]
       [else (abstract-apply proc (stream->list args) trace)])]
-    [(#%top . _) ⊥]
-    [(#%variable-reference . _) (error "#%variable-reference not supported")]))
+    ; FIXME: Assuming `id` is unbound, which could not be true
+    [(#%top . id) ⊥]
+    [(#%variable-reference . _) (error "not implemented")]))
 
 (define (iterate-fixpoint proc init)
   (define result (proc init))
@@ -144,7 +147,7 @@
    [(T? proc) T]
    [(procedure? proc) (apply proc args)]
    [(closure? proc)
-    (define/syntax-parse lam:lambda-expr
+    (define/syntax-parse ((~literal #%plain-lambda) (arg-id ...) body)
       (closure-lambda proc))
     (match-define (cons prev-args result)
       (hash-ref trace #'lam (cons #f ⊥)))
@@ -155,12 +158,12 @@
         (if prev-args (map lub args prev-args) args))
       (define env-prime
         (for/fold ([acc (closure-environment proc)])
-                  ([arg-id (in-syntax #'(lam.arg-id ...))]
+                  ([arg-id (in-syntax #'(arg-id ...))]
                    [arg (in-list new-args)])
           (environment-set acc arg-id arg)))
       (iterate-fixpoint
         (lambda (result)
           (define new-trace (hash-set trace #'lam (cons new-args result)))
-          (abstract-eval-syntax #'lam.body env-prime new-trace))
+          (abstract-eval-syntax #'body env-prime new-trace))
         ⊥)])] ; Maybe use previous result instead of ⊥?
   [else ⊥]))
