@@ -8,7 +8,7 @@
          "common.rkt"
          "environment.rkt")
 
-(struct closure (lambda environment) #:transparent)
+(struct closure (lambda environment))
 
 ; TODO: Double check there isn't a risk that this goes into an
 ; infinite loop when both arguments are recursive procedures
@@ -68,9 +68,9 @@
     #:conventions (id-suffix expr-suffix)
     #:literal-sets (kernel-literals)
     [(#%expression expr) (abstract-eval-syntax #'expr env trace)]
-    [(~and id (~fail #:when (eq? (identifier-binding #'id) 'lexical)))
-     (namespace-variable-value (syntax-e #'id))]
-    [id (environment-ref env #'id ⊥)]
+    [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))
+     (environment-ref env #'id ⊥)]
+    [id (namespace-variable-value (syntax-e #'id))]
     [(#%plain-lambda (arg-id ...) body)
      (define captured-env
        (for/fold ([acc (make-empty-environment)])
