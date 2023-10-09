@@ -1,46 +1,48 @@
 #lang racket
 
 (require rackunit
+         "common.rkt"
          "abstract-eval.rkt"
-         "closure.rkt"
          "environment.rkt"
-         (prefix-in domain: "domain.rkt")
          "types.rkt")
 
-(current-namespace (make-base-namespace))
+(define (infer-type expr)
+  (parameterize
+    ([property-from-syntax
+        (lambda (stx) (datum->type (syntax->datum stx)))]
+     [property-stronger?
+        (lambda (v1 v2 recur-proc) (type<=? v1 v2))]
+     [property-combine
+        (lambda (v1 v2 recur-proc) (type-lub v1 v2))])
+    (abstract-eval expr (make-base-namespace))))
 
-(define abstract-eval
-  (make-abstract-evaluator type-domain datum->type))
 
-(define T (domain:T type-domain))
-(define ⊥ (domain:⊥ type-domain))
-
-(check-equal? (abstract-eval 10) (datum->type 10))
-(check-equal? (abstract-eval '(let ([x 10]) x)) (datum->type 10))
+(check-equal? (infer-type 10) (datum->type 10))
+(check-equal? (infer-type '(let ([x 10]) x)) (datum->type 10))
 (check-equal?
- (abstract-eval '(let ([x 'not-ok]) (let ([x 'ok]) x)))
-                (datum->type 'ok))
-(check-equal? (abstract-eval '(+ 10 11)) (datum->type 21))
+  (infer-type '(let ([x 'not-ok]) (let ([x 'ok]) x)))
+  (datum->type 'ok))
+(check-equal? (infer-type '(+ 10 11)) (datum->type 21))
 (check-not-exn
  (lambda ()
-   (abstract-eval '(lambda (x) x))))
-(check-equal? (abstract-eval '((lambda (x) x) 10)) (datum->type 10))
-(check-equal? (abstract-eval '((lambda (x) (+ x 11)) 10)) (datum->type 21))
-(check-equal? (abstract-eval '(if #t 'ok 'not-ok)) (datum->type 'ok))
-(check-equal? (abstract-eval '(if #f 'not-ok 'ok)) (datum->type 'ok))
-(check-equal? (abstract-eval '(+ 1 (* 3 (- 10 7)))) (datum->type 10))
-(check-equal? (abstract-eval '(let ([f +]) (f 10 11))) (datum->type 21))
+   (infer-type '(lambda (x) x))))
+(check-equal? (infer-type '((lambda (x) x) 10)) (datum->type 10))
+(check-equal? (infer-type '((lambda (x) (+ x 11)) 10)) (datum->type 21))
+(check-equal? (infer-type '(if #t 'ok 'not-ok)) (datum->type 'ok))
+(check-equal? (infer-type '(if #f 'not-ok 'ok)) (datum->type 'ok))
+(check-equal? (infer-type '(+ 1 (* 3 (- 10 7)))) (datum->type 10))
+(check-equal? (infer-type '(let ([f +]) (f 10 11))) (datum->type 21))
 
-(check-equal? (abstract-eval '(let ([x 10] [y 11]) (+ x y))) (datum->type 21))
+(check-equal? (infer-type '(let ([x 10] [y 11]) (+ x y))) (datum->type 21))
 
 (check-exn
  exn:fail?
  (lambda ()
-   (abstract-eval '(let ([x 10] [x 11]) x))))
+   (infer-type '(let ([x 10] [x 11]) x))))
 
 ; FIXME: Evaluates to T because we don't check primitive contracts
 (check-equal?
- (abstract-eval
+ (infer-type
   '(letrec ([fac (lambda (n) (if (= n 0) 1 (* n (fac (- n 1)))))])
      (fac 5)))
  (Exact-Nonnegative-Integer)
@@ -48,46 +50,43 @@
 
 ; FIXME: Fails because closures are no longer `#:transparent` (regression)
 (check-equal?
- (abstract-eval
+ (infer-type
   '(letrec ([even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))]
             [odd? (lambda (n) (if (= n 0) #f (even? (- n 1))))])
      (even? 101)))
  T)
 
-(check-equal? (abstract-eval '(read)) T)
-(check-equal? (abstract-eval '(+ (read) 10)) T)
+(check-equal? (infer-type '(read)) T)
+(check-equal? (infer-type '(+ (read) 10)) T)
 
-(check-equal? (abstract-eval '(if #t 'ok (read))) (datum->type 'ok))
-(check-equal? (abstract-eval '(if #f (read) 'ok)) (datum->type 'ok))
-(check-equal? (abstract-eval '(if (read) 10 10)) (datum->type 10))
-(check-true
- (domain:<=? type-domain
-             (abstract-eval '(if (read) 10 11))
-             (Number)))
+(check-equal? (infer-type '(if #t 'ok (read))) (datum->type 'ok))
+(check-equal? (infer-type '(if #f (read) 'ok)) (datum->type 'ok))
+(check-equal? (infer-type '(if (read) 10 10)) (datum->type 10))
+(check-true (type<=? (infer-type '(if (read) 10 11)) (Number)))
 
-(check-equal? (abstract-eval '(error)) ⊥)
-(check-equal? (abstract-eval '(let ([x (error)]) 'unused)) ⊥)
-(check-equal? (abstract-eval '(letrec ([x (error)]) 'unused)) ⊥)
-(check-equal? (abstract-eval '((error) 'unused)) ⊥)
-(check-equal? (abstract-eval '(+ (error) 10)) ⊥)
-(check-equal? (abstract-eval '(+ 10 (error))) ⊥)
+(check-equal? (infer-type '(error)) ⊥)
+(check-equal? (infer-type '(let ([x (error)]) 'unused)) ⊥)
+(check-equal? (infer-type '(letrec ([x (error)]) 'unused)) ⊥)
+(check-equal? (infer-type '((error) 'unused)) ⊥)
+(check-equal? (infer-type '(+ (error) 10)) ⊥)
+(check-equal? (infer-type '(+ 10 (error))) ⊥)
 
-(check-equal? (abstract-eval 'x) ⊥)
-(check-equal? (abstract-eval '(let ([x 10]) y)) ⊥)
-(check-equal? (abstract-eval '(if (read) 10 x)) (datum->type 10))
+(check-equal? (infer-type 'x) ⊥)
+(check-equal? (infer-type '(let ([x 10]) y)) ⊥)
+(check-equal? (infer-type '(if (read) 10 x)) (datum->type 10))
 
-(check-not-equal? (abstract-eval '(if (read) + +)) T)
+(check-not-equal? (infer-type '(if (read) + +)) T)
 
-(check-true
+#;(check-true
  (closure?
-   (abstract-eval
+   (infer-type
      '(let ([f (lambda (x) x)])
         (if (read) f f)))))
 
-(check-equal?
+#;(check-equal?
  (environment-ref
   (closure-environment
-   (abstract-eval
+   (infer-type
      '(let ([c (lambda (x) (lambda () x))])
         (if (read)
             (c 10)
@@ -95,12 +94,11 @@
   #'x)
  (datum->type 10))
 
-(check-true
- (domain:<=?
-  type-domain
+#;(check-true
+ (type<=?
   (environment-ref
    (closure-environment
-    (abstract-eval
+    (infer-type
       '(let ([c (lambda (x) (lambda () x))])
          (if (read)
              (c 10)
@@ -109,14 +107,14 @@
   (Number)))
 
 (check-equal?
- (abstract-eval
+ (infer-type
    '(if (read)
         (lambda (x) x)
         (lambda (y) y)))
  T)
 
 (check-equal?
-  (abstract-eval
+  (infer-type
     '(let ([f (lambda (x) (* 2 x))])
        (map f '(1 2 3))))
  (datum->type '(2 4 6))

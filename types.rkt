@@ -15,8 +15,7 @@
          (struct-out Integer)
          (struct-out Exact-Nonnegative-Integer)
          (struct-out Pairof)
-         (struct-out Listof)
-         type-domain)
+         (struct-out Listof))
 
 (provide
  (contract-out
@@ -25,8 +24,6 @@
   [type->datum   (-> type? any/c)]
   [type<=?       (-> type? type? boolean?)]
   [type-lub      (-> type? type? type?)]))
-
-(require "domain.rkt")
 
 (struct type () #:transparent)
 
@@ -170,6 +167,3 @@
   [(t1 t2) #:when (type<=? t1 t2) t2]
   [(t1 t2) #:when (type<=? t2 t1) t1]
   [(t1 t2) (Truthy)])
-
-(define type-domain
-  (make-domain type? type<=? type-lub (Top)))
