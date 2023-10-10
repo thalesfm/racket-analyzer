@@ -1,6 +1,5 @@
 ## Requirements for MVP
 
-- Fix `letrec` regression (see failing test)
 - Implement backtracking for recursive procedure calls
 
 ## Requirements for program verification
@@ -21,4 +20,3 @@
 - Replace streams with exceptions for error handling?
 - Make it so higher-order primitive procedures work with the analysis?
     - Make closures callable using `prop:procedure`
-    - Pass the `trace` argument around implicitly as a parameter

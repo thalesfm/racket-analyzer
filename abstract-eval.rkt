@@ -53,100 +53,24 @@
    [(or  (closure? v1) (closure? v2)) T]
    [else ((property-combine) v1 v2 lub)]))
 
-(define (abstract-eval expr [namespace (current-namespace)])
-  (parameterize ([current-namespace namespace])
-    (define stx (namespace-syntax-introduce (datum->syntax #f expr)))
-    (abstract-eval-syntax (expand stx)
-                          (make-empty-environment)
-                          (make-hasheq)
-                          (hasheq))))
+(define *store* (make-hasheq))
+(define current-trace (make-parameter #f))
 
 (define-conventions id-suffix [#rx"(^|-)id$" id])
 (define-conventions expr-suffix [#rx"(^|-)expr$" expr])
 
-(define (abstract-eval-syntax stx env store trace)
-  (syntax-parse stx
-    #:conventions (id-suffix expr-suffix)
-    #:literal-sets (kernel-literals)
-    [(#%expression expr) (abstract-eval-syntax #'expr env store trace)]
-    [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))
-     (define loc (environment-ref env #'id #f))
-     (dict-ref store loc ⊥)]
-    [id
-     (namespace-variable-value (syntax-e #'id) #t (lambda () ⊥))]
-    [(#%plain-lambda (arg-id ...) body)
-     (define captured-env
-       (for/fold ([acc (make-empty-environment)])
-                 ([var (free-vars stx #:module-bound? #t)])
-         (environment-set acc var (environment-ref env var #f))))
-     (closure stx captured-env)]
-    [(case-lambda . _) (error "not implemented")]
-    [(if ~! test-expr then-expr else-expr)
-     (define test-val (abstract-eval-syntax #'test-expr env store trace))
-     ;; FIXME: Not general!
-     (cond
-      [(⊥? test-val) ⊥]
-      [(T? test-val)
-       (lub (abstract-eval-syntax #'then-expr env store trace)
-            (abstract-eval-syntax #'else-expr env store trace))]
-      [(equal? test-val ((property-from-syntax) #'#f))
-       (abstract-eval-syntax #'else-expr env store trace)]
-      [else
-       (abstract-eval-syntax #'then-expr env store trace)])]
-    [(begin expr ...) (error "not implemented")]
-    [(begin0 expr0 expr ...) (error "not implemented")]
-    [(let-values ~! ([(id) val-expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
-                 "duplicate identifier"
-     (define vals
-       (for/stream ([val-expr (in-syntax #'(val-expr ...))])
-         (abstract-eval-syntax val-expr env store trace)))
-     (cond
-      [(stream-ormap ⊥? vals) ⊥]
-      [else
-       (define env-prime
-         (for/fold ([acc env])
-                   ([var (in-syntax #'(id ...))]
-                    [val (in-stream vals)])
-           (define loc (gensym))
-           (dict-set! store loc val)
-           (environment-set acc var loc)))
-       (abstract-eval-syntax #'body env-prime store trace)])]
-    [(letrec-values ~! ([(id) val-expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
-                 "duplicate identifier"
-     (define env-prime
-       (for/fold ([acc env])
-                 ([var (in-syntax #'(id ...))])
-         (define loc (gensym))
-         (dict-set! store loc ⊥)
-         (environment-set acc var loc)))
-     (define vals
-       (for/stream ([val-expr (in-syntax #'(val-expr ...))])
-         (abstract-eval-syntax val-expr env-prime store trace)))
-     (cond
-      [(stream-ormap ⊥? vals) ⊥]
-      [else
-       (for ([var (in-syntax #'(id ...))]
-             [val (in-stream vals)])
-         (define loc (environment-ref env-prime var))
-         (dict-set! store loc val))
-       (abstract-eval-syntax #'body env-prime store trace)])]
-    [(set! id expr) (error "not implemented")]
-    [(quote datum) ((property-from-syntax) #'datum)]
-    [(quote-syntax datum) (error "not implemented")]
-    [(with-continuation-mark . _) (error "not implemented")]
-    [(#%plain-app proc-expr arg-expr ...)
-     (define proc (abstract-eval-syntax #'proc-expr env store trace))
-     (define args
-       (for/stream ([arg-expr (in-syntax #'(arg-expr ...))])
-         (abstract-eval-syntax arg-expr env store trace)))
-     (cond
-      [(or (⊥? proc) (stream-ormap ⊥? args)) ⊥]
-      [else (abstract-apply proc (stream->list args) store trace)])]
-    ; FIXME: Assuming `id` is unbound, which could not be true
-    [(#%top . id) ⊥]
-    [(#%variable-reference . _) (error "not implemented")]))
+(define (lookup env id)
+  (define loc (environment-ref env id #f))
+  (dict-ref *store* loc ⊥))
+
+(define (bind env id v)
+  (define loc (gensym))
+  (dict-set! *store* loc v)
+  (environment-set env id loc))
+
+(define (update! env id v)
+  (define loc (environment-ref env id))
+  (dict-set! *store* loc v))
 
 (define (iterate-fixpoint proc init)
   (define result (proc init))
@@ -154,7 +78,94 @@
       result
       (iterate-fixpoint proc result)))
 
-(define (abstract-apply proc args store trace)
+(define (abstract-eval expr [namespace (current-namespace)])
+  (define stx (namespace-syntax-introduce (datum->syntax #f expr)))
+  (abstract-eval-syntax stx namespace))
+
+(define (abstract-eval-syntax stx [namespace (current-namespace)])
+  (parameterize ([current-namespace namespace]
+                 [current-trace (hasheq)])
+    (abstract-eval-stx (expand stx) (make-empty-environment))))
+
+(define (abstract-eval-stx stx env)
+  (syntax-parse stx
+    #:conventions (id-suffix expr-suffix)
+    #:literal-sets (kernel-literals)
+    [(#%expression expr) (abstract-eval-stx #'expr env)]
+    [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))
+     (lookup env #'id)]
+    [id
+     (namespace-variable-value (syntax-e #'id) #t (lambda () ⊥))]
+    [(#%plain-lambda (arg-id ...) body)
+     (define captured-env
+       (for/fold ([acc (make-empty-environment)])
+                 ([var (free-vars stx #:module-bound? #t)])
+         (environment-set acc var (environment-ref env var))))
+     (closure stx captured-env)]
+    [(case-lambda . _) (error "not implemented")]
+    [(if ~! test-expr then-expr else-expr)
+     (define test-val (abstract-eval-stx #'test-expr env))
+     ;; FIXME: Not general!
+     (cond
+      [(⊥? test-val) ⊥]
+      [(T? test-val)
+       (lub (abstract-eval-stx #'then-expr env)
+            (abstract-eval-stx #'else-expr env))]
+      [(equal? test-val ((property-from-syntax) #'#f))
+       (abstract-eval-stx #'else-expr env)]
+      [else
+       (abstract-eval-stx #'then-expr env)])]
+    [(begin expr ...) (error "not implemented")]
+    [(begin0 expr0 expr ...) (error "not implemented")]
+    [(let-values ~! ([(id) val-expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
+                 "duplicate identifier"
+     (define vals
+       (for/stream ([val-expr (in-syntax #'(val-expr ...))])
+         (abstract-eval-stx val-expr env)))
+     (cond
+      [(stream-ormap ⊥? vals) ⊥]
+      [else
+       (define env-prime
+         (for/fold ([acc env])
+                   ([var (in-syntax #'(id ...))]
+                    [val (in-stream vals)])
+           (bind acc var val)))
+       (abstract-eval-stx #'body env-prime)])]
+    [(letrec-values ~! ([(id) val-expr] ...) body)
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
+                 "duplicate identifier"
+     (define env-prime
+       (for/fold ([acc env])
+                 ([var (in-syntax #'(id ...))])
+         (bind acc var ⊥)))
+     (define vals
+       (for/stream ([val-expr (in-syntax #'(val-expr ...))])
+         (abstract-eval-stx val-expr env-prime)))
+     (cond
+      [(stream-ormap ⊥? vals) ⊥]
+      [else
+       (for ([var (in-syntax #'(id ...))]
+             [val (in-stream vals)])
+         (update! env-prime var val))
+       (abstract-eval-stx #'body env-prime)])]
+    [(set! id expr) (error "not implemented")]
+    [(quote datum) ((property-from-syntax) #'datum)]
+    [(quote-syntax datum) (error "not implemented")]
+    [(with-continuation-mark . _) (error "not implemented")]
+    [(#%plain-app proc-expr arg-expr ...)
+     (define proc (abstract-eval-stx #'proc-expr env))
+     (define args
+       (for/stream ([arg-expr (in-syntax #'(arg-expr ...))])
+         (abstract-eval-stx arg-expr env)))
+     (cond
+      [(or (⊥? proc) (stream-ormap ⊥? args)) ⊥]
+      [else (abstract-apply proc (stream->list args))])]
+    ; FIXME: Assuming `id` is unbound, which could not be true
+    [(#%top . id) ⊥]
+    [(#%variable-reference . _) (error "not implemented")]))
+
+(define (abstract-apply proc args)
   (cond
    [(T? proc) T]
    [(procedure? proc) (apply proc args)]
@@ -162,7 +173,7 @@
     (define lam (closure-lambda proc))
     (define/syntax-parse ((~literal #%plain-lambda) (arg-id ...) body) lam)
     (match-define (cons prev-args result)
-      (hash-ref trace lam (cons #f ⊥)))
+      (hash-ref (current-trace) lam (cons #f ⊥)))
     (cond
      [(and prev-args (andmap <=? args prev-args)) result]
      [else
@@ -172,12 +183,12 @@
         (for/fold ([acc (closure-environment proc)])
                   ([arg-id (in-syntax #'(arg-id ...))]
                    [arg (in-list new-args)])
-          (define loc (gensym))
-          (dict-set! store loc arg)
-          (environment-set acc arg-id loc)))
+          (bind acc arg-id arg)))
       (iterate-fixpoint
         (lambda (result)
-          (define new-trace (hash-set trace lam (cons new-args result)))
-          (abstract-eval-syntax #'body env-prime store new-trace))
+          (define old-trace (current-trace))
+          (define new-trace (hash-set old-trace lam (cons new-args result)))
+          (parameterize ([current-trace new-trace])
+            (abstract-eval-stx #'body env-prime)))
         ⊥)])] ; Maybe use previous result instead of ⊥?
   [else ⊥]))

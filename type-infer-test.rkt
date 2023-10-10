@@ -108,3 +108,5 @@
        (map f '(1 2 3))))
  (datum->type '(2 4 6))
  "this is expected to fail for now")
+
+(check-equal?  (infer-type '(let ([f (lambda () x)]) 10)) (datum->type 10))
