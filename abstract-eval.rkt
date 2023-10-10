@@ -53,24 +53,20 @@
    [(or  (closure? v1) (closure? v2)) T]
    [else ((property-combine) v1 v2 lub)]))
 
-(define *store* (make-hasheq))
+; Could be replaced by an ephemeron hash table
+; (available from version 8.0 onwards of package `base`)
+(define *store* (make-weak-hasheq))
 (define current-trace (make-parameter #f))
-
 (define-conventions id-suffix [#rx"(^|-)id$" id])
 (define-conventions expr-suffix [#rx"(^|-)expr$" expr])
 
-(define (lookup env id)
-  (define loc (environment-ref env id #f))
-  (dict-ref *store* loc ⊥))
+(define (store-ref key)
+  (define eph (hash-ref *store* key #f))
+  (if eph (ephemeron-value eph) ⊥))
 
-(define (bind env id v)
-  (define loc (gensym))
-  (dict-set! *store* loc v)
-  (environment-set env id loc))
-
-(define (update! env id v)
-  (define loc (environment-ref env id))
-  (dict-set! *store* loc v))
+(define (store-set! key v)
+  (define eph (make-ephemeron key v))
+  (hash-set! *store* key eph))
 
 (define (iterate-fixpoint proc init)
   (define result (proc init))
@@ -85,7 +81,8 @@
 (define (abstract-eval-syntax stx [namespace (current-namespace)])
   (parameterize ([current-namespace namespace]
                  [current-trace (hasheq)])
-    (abstract-eval-stx (expand stx) (make-empty-environment))))
+    (abstract-eval-stx (expand stx)
+                       (make-empty-environment))))
 
 (define (abstract-eval-stx stx env)
   (syntax-parse stx
@@ -93,14 +90,14 @@
     #:literal-sets (kernel-literals)
     [(#%expression expr) (abstract-eval-stx #'expr env)]
     [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))
-     (lookup env #'id)]
+     (store-ref (environment-ref env #'id #f))]
     [id
      (namespace-variable-value (syntax-e #'id) #t (lambda () ⊥))]
-    [(#%plain-lambda (arg-id ...) body)
+    [(#%plain-lambda (id ...) body)
      (define captured-env
        (for/fold ([acc (make-empty-environment)])
-                 ([var (free-vars stx #:module-bound? #t)])
-         (environment-set acc var (environment-ref env var))))
+                 ([id (free-vars stx #:module-bound? #t)])
+         (environment-set acc id (environment-ref env id))))
      (closure stx captured-env)]
     [(case-lambda . _) (error "not implemented")]
     [(if ~! test-expr then-expr else-expr)
@@ -113,8 +110,7 @@
             (abstract-eval-stx #'else-expr env))]
       [(equal? test-val ((property-from-syntax) #'#f))
        (abstract-eval-stx #'else-expr env)]
-      [else
-       (abstract-eval-stx #'then-expr env)])]
+      [else (abstract-eval-stx #'then-expr env)])]
     [(begin expr ...) (error "not implemented")]
     [(begin0 expr0 expr ...) (error "not implemented")]
     [(let-values ~! ([(id) val-expr] ...) body)
@@ -128,31 +124,36 @@
       [else
        (define env-prime
          (for/fold ([acc env])
-                   ([var (in-syntax #'(id ...))]
-                    [val (in-stream vals)])
-           (bind acc var val)))
+                   ([id (in-syntax #'(id ...))]
+                    [v (in-stream vals)])
+           (define loc (gensym))
+           (store-set! loc v)
+           (environment-set acc id loc)))
        (abstract-eval-stx #'body env-prime)])]
     [(letrec-values ~! ([(id) val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
      (define env-prime
        (for/fold ([acc env])
-                 ([var (in-syntax #'(id ...))])
-         (bind acc var ⊥)))
+                 ([id (in-syntax #'(id ...))])
+         (define loc (gensym))
+         (environment-set acc id loc)))
      (define vals
        (for/stream ([val-expr (in-syntax #'(val-expr ...))])
          (abstract-eval-stx val-expr env-prime)))
      (cond
       [(stream-ormap ⊥? vals) ⊥]
       [else
-       (for ([var (in-syntax #'(id ...))]
-             [val (in-stream vals)])
-         (update! env-prime var val))
+       (for ([id (in-syntax #'(id ...))]
+             [v (in-stream vals)])
+         (define loc (environment-ref env-prime id))
+         (store-set! loc v))
        (abstract-eval-stx #'body env-prime)])]
-    [(set! id expr) (error "not implemented")]
+    ; TODO:
+    ; [(set! id expr) (error "not implemented")]
     [(quote datum) ((property-from-syntax) #'datum)]
-    [(quote-syntax datum) (error "not implemented")]
-    [(with-continuation-mark . _) (error "not implemented")]
+    ; [(quote-syntax datum) (error "not implemented")]
+    ; [(with-continuation-mark . _) (error "not implemented")]
     [(#%plain-app proc-expr arg-expr ...)
      (define proc (abstract-eval-stx #'proc-expr env))
      (define args
@@ -161,9 +162,8 @@
      (cond
       [(or (⊥? proc) (stream-ormap ⊥? args)) ⊥]
       [else (abstract-apply proc (stream->list args))])]
-    ; FIXME: Assuming `id` is unbound, which could not be true
-    [(#%top . id) ⊥]
-    [(#%variable-reference . _) (error "not implemented")]))
+    [(#%top . id) (abstract-eval-stx #'id env)]))
+    ; [(#%variable-reference . _) (error "not implemented")]))
 
 (define (abstract-apply proc args)
   (cond
@@ -171,7 +171,7 @@
    [(procedure? proc) (apply proc args)]
    [(closure? proc)
     (define lam (closure-lambda proc))
-    (define/syntax-parse ((~literal #%plain-lambda) (arg-id ...) body) lam)
+    (define/syntax-parse ((~literal #%plain-lambda) (id ...) body) lam)
     (match-define (cons prev-args result)
       (hash-ref (current-trace) lam (cons #f ⊥)))
     (cond
@@ -181,9 +181,11 @@
         (if prev-args (map lub args prev-args) args))
       (define env-prime
         (for/fold ([acc (closure-environment proc)])
-                  ([arg-id (in-syntax #'(arg-id ...))]
-                   [arg (in-list new-args)])
-          (bind acc arg-id arg)))
+                  ([id (in-syntax #'(id ...))]
+                   [v (in-list new-args)])
+          (define loc (gensym))
+          (store-set! loc v)
+          (environment-set acc id loc)))
       (iterate-fixpoint
         (lambda (result)
           (define old-trace (current-trace))
