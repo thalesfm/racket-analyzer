@@ -11,6 +11,7 @@
 (check-equal?
   (infer-type '(let ([x 'not-ok]) (let ([x 'ok]) x)))
   (datum->type 'ok))
+(check-equal? (infer-type '(let ([+ 10]) +)) (datum->type 10))
 (check-equal? (infer-type '(+ 10 11)) (datum->type 21))
 (check-not-exn
  (lambda ()
@@ -37,7 +38,6 @@
  (Exact-Nonnegative-Integer)
  "this is expected to fail for now")
 
-; FIXME: Fails because closures are no longer `#:transparent` (regression)
 (check-equal?
  (infer-type
   '(letrec ([even? (lambda (n) (if (= n 0) #t (odd? (- n 1))))]

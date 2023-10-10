@@ -1,7 +1,6 @@
 #lang racket
 
-(provide (struct-out Top)
-         (struct-out Bot)
+(provide (struct-out Bot)
          (struct-out Truthy)
          (struct-out Literal)
          (struct-out Char)
@@ -32,7 +31,7 @@
 
 (struct type () #:transparent)
 
-(struct Top type () #:transparent)
+;(struct Top type () #:transparent)
 (struct Bot type () #:transparent)
 
 (struct Truthy type () #:transparent)
@@ -87,7 +86,7 @@
 ;; returns false when none (or multiple) exist
 (define (super t)
   (match t
-    [(Literal #f) (Top)]
+    [(Literal #f) T]
     [(Literal #t) (Truthy)]
 
     [(Literal (? char?))     (Char)]
@@ -107,7 +106,7 @@
     [(Symbol)   (Truthy)]
     [(Void)     (Truthy)]
 
-    [(Truthy)   (Top)]
+    [(Truthy)   T]
     [(Number)   (Truthy)]
     [(Real)     (Number)]
     [(Rational) (Real)]
@@ -122,7 +121,7 @@
     [_ #f]))
 
 (define/match (type<=? t1 t2)
-  [(_ (Top)) #t]
+  [(_ (? T?)) #t]
   [((Bot) _) #t]
 
   [((== Null)      (Listof _ )   ) #t]
@@ -143,8 +142,8 @@
   [(_  _ ) #f])
 
 (define/match (type-lub t1 t2)
-  [((Top) _       ) (Top)]
-  [(_        (Top)) (Top)]
+  [((? T?) _       ) T]
+  [(_        (? T?)) T]
   [((Bot)    _    ) t2]
   [(_        (Bot)) t1]
 
@@ -162,8 +161,8 @@
      [_           (Truthy)])]
 
   ;; These cases are reduntant but avoid expensive `type<=?` comparisons
-  [((Pairof _  _ ) t             ) (if t (Truthy) (Top))]
-  [(t              (Pairof _  _ )) (if t (Truthy) (Top))]
+  [((Pairof _  _ ) t             ) (if t (Truthy) T)]
+  [(t              (Pairof _  _ )) (if t (Truthy) T)]
 
   [(t1 t2) #:when (equal?  t1 t2) t1]
   [((Literal _) (Literal _)) (type-lub (super t1) (super t2))]
