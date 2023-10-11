@@ -6,7 +6,8 @@
 (require syntax/free-vars
          syntax/parse
          "common.rkt"
-         "environment.rkt")
+         "environment.rkt"
+         "store.rkt")
 
 (struct closure (lambda environment))
 
@@ -53,20 +54,9 @@
    [(or  (closure? v1) (closure? v2)) T]
    [else ((property-combine) v1 v2 lub)]))
 
-; Could be replaced by an ephemeron hash table
-; (available from version 8.0 onwards of package `base`)
-(define *store* (make-weak-hasheq))
 (define current-trace (make-parameter #f))
 (define-conventions id-suffix [#rx"(^|-)id$" id])
 (define-conventions expr-suffix [#rx"(^|-)expr$" expr])
-
-(define (store-ref key)
-  (define eph (hash-ref *store* key #f))
-  (if eph (ephemeron-value eph) ⊥))
-
-(define (store-set! key v)
-  (define eph (make-ephemeron key v))
-  (hash-set! *store* key eph))
 
 (define (iterate-fixpoint proc init)
   (define result (proc init))
@@ -90,7 +80,7 @@
     #:literal-sets (kernel-literals)
     [(#%expression expr) (abstract-eval-stx #'expr env)]
     [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))
-     (store-ref (environment-ref env #'id #f))]
+     (store-ref (environment-ref env #'id #f) ⊥)]
     [id
      (namespace-variable-value (syntax-e #'id) #t (lambda () ⊥))]
     [(#%plain-lambda (id ...) body)
@@ -172,25 +162,31 @@
    [(closure? proc)
     (define lam (closure-lambda proc))
     (define/syntax-parse ((~literal #%plain-lambda) (id ...) body) lam)
-    (match-define (cons prev-args result)
-      (hash-ref (current-trace) lam (cons #f ⊥)))
+    (match-define (list prev-args result backtrack)
+      (hash-ref (current-trace) lam (list #f ⊥ 'no-backtrack)))
     (cond
-     [(and prev-args (andmap <=? args prev-args)) result]
-     [else
-      (define new-args
-        (if prev-args (map lub args prev-args) args))
+     ; First call to procedure in the call stack
+     [(not prev-args)
+      (define backtrack #f)
+      (define args-prime
+        (let/cc k (set! backtrack k) args))
       (define env-prime
         (for/fold ([acc (closure-environment proc)])
                   ([id (in-syntax #'(id ...))]
-                   [v (in-list new-args)])
+                   [v (in-list args-prime)])
           (define loc (gensym))
           (store-set! loc v)
           (environment-set acc id loc)))
       (iterate-fixpoint
-        (lambda (result)
-          (define old-trace (current-trace))
-          (define new-trace (hash-set old-trace lam (cons new-args result)))
-          (parameterize ([current-trace new-trace])
-            (abstract-eval-stx #'body env-prime)))
-        ⊥)])] ; Maybe use previous result instead of ⊥?
-  [else ⊥]))
+       (lambda (result)
+         (define trace-prime
+           (hash-set (current-trace) lam
+                     (list args-prime result backtrack)))
+         (parameterize ([current-trace trace-prime])
+           (abstract-eval-stx #'body env-prime)))
+      ⊥)]
+     ; Subsequent call to procedure with compatible arguments
+     [(andmap <=? args prev-args) result]
+     ; Subsequent call to procedure, but arguments need to be combined
+     [else (backtrack (map lub args prev-args))])]
+   [else ⊥]))

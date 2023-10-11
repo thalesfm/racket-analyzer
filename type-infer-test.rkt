@@ -2,8 +2,6 @@
 
 (require rackunit
          "common.rkt"
-         "abstract-eval.rkt"
-         "environment.rkt"
          "types.rkt")
 
 (check-equal? (infer-type 10) (datum->type 10))
@@ -110,3 +108,10 @@
  "this is expected to fail for now")
 
 (check-equal?  (infer-type '(let ([f (lambda () x)]) 10)) (datum->type 10))
+
+(check-equal?
+  (infer-type
+   '(letrec ([f (lambda (x) (if x f x))])
+      (let ([g (f 10)])
+        (g #f))))
+  (datum->type #f))

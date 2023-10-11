@@ -1,7 +1,3 @@
-## Requirements for MVP
-
-- Implement backtracking for recursive procedure calls
-
 ## Requirements for program verification
 
 - Track/report errors detected by the analysis
