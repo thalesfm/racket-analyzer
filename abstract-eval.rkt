@@ -64,51 +64,76 @@
       result
       (iterate-fixpoint proc result)))
 
-(define (abstract-eval expr [namespace (current-namespace)])
-  (define stx (namespace-syntax-introduce (datum->syntax #f expr)))
-  (abstract-eval-syntax stx namespace))
+(define (abstract-eval top-level-form [namespace (current-namespace)])
+  (abstract-eval-syntax
+   (namespace-syntax-introduce
+    (datum->syntax #f top-level-form))
+   namespace))
 
-(define (abstract-eval-syntax stx [namespace (current-namespace)])
+(define (abstract-eval-syntax top-level-form [namespace (current-namespace)])
   (parameterize ([current-namespace namespace]
                  [current-trace (hasheq)])
-    (abstract-eval-stx (expand stx)
-                       (make-empty-environment))))
+    (abstract-eval-kernel-syntax (expand top-level-form)
+                                 (make-empty-environment))))
 
-(define (abstract-eval-stx stx env)
+(define (abstract-eval-kernel-syntax kernel-form env)
+  (syntax-parse kernel-form
+    #:literal-sets (kernel-literals)
+    [(#%expression expr) (abstract-eval-expr #'expr env)]
+    [(module . _) (error "not implemented")]
+    [(begin . _) (error "not implemented")]
+    [(begin-for-syntax . _) (error "not implemented")]
+    [(define-values . _) (error "not implemented")]
+    [(define-syntaxes . _) (error "not implemented")]
+    [(#%require . _) (error "not implemented")]
+    [expr (abstract-eval-expr #'expr env)]))
+
+(define (abstract-eval-expr stx env)
   (syntax-parse stx
     #:conventions (id-suffix expr-suffix)
     #:literal-sets (kernel-literals)
-    [(#%expression expr) (abstract-eval-stx #'expr env)]
+
     [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))
      (store-ref (environment-ref env #'id #f) ⊥)]
-    [id
+    [id ; Top-level, module-level, or unbound identifier
      (namespace-variable-value (syntax-e #'id) #t (lambda () ⊥))]
+
     [(#%plain-lambda (id ...) body)
      (define captured-env
        (for/fold ([acc (make-empty-environment)])
                  ([id (free-vars stx #:module-bound? #t)])
          (environment-set acc id (environment-ref env id))))
      (closure stx captured-env)]
-    [(case-lambda . _) (error "not implemented")]
+
+    [(case-lambda . _)
+     (error "not implemented")]
+
     [(if ~! test-expr then-expr else-expr)
-     (define test-val (abstract-eval-stx #'test-expr env))
+     (define test-val (abstract-eval-expr #'test-expr env))
      ;; FIXME: Not general!
      (cond
       [(⊥? test-val) ⊥]
       [(T? test-val)
-       (lub (abstract-eval-stx #'then-expr env)
-            (abstract-eval-stx #'else-expr env))]
+       (lub (abstract-eval-expr #'then-expr env)
+            (abstract-eval-expr #'else-expr env))]
       [(equal? test-val ((property-from-syntax) #'#f))
-       (abstract-eval-stx #'else-expr env)]
-      [else (abstract-eval-stx #'then-expr env)])]
-    [(begin expr ...) (error "not implemented")]
-    [(begin0 expr0 expr ...) (error "not implemented")]
+       (abstract-eval-expr #'else-expr env)]
+      [else (abstract-eval-expr #'then-expr env)])]
+
+    [(begin expr ...)
+     (for/last ([expr (in-syntax #'(expr ...))])
+       (abstract-eval-expr expr env))]
+
+    [(begin0 expr0 expr ...)
+     (for/first ([expr (in-syntax #'(expr0 expr ...))])
+       (abstract-eval-expr expr env))]
+
     [(let-values ~! ([(id) val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
      (define vals
        (for/stream ([val-expr (in-syntax #'(val-expr ...))])
-         (abstract-eval-stx val-expr env)))
+         (abstract-eval-expr val-expr env)))
      (cond
       [(stream-ormap ⊥? vals) ⊥]
       [else
@@ -119,7 +144,8 @@
            (define loc (gensym))
            (store-set! loc v)
            (environment-set acc id loc)))
-       (abstract-eval-stx #'body env-prime)])]
+       (abstract-eval-expr #'body env-prime)])]
+
     [(letrec-values ~! ([(id) val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
@@ -130,7 +156,7 @@
          (environment-set acc id loc)))
      (define vals
        (for/stream ([val-expr (in-syntax #'(val-expr ...))])
-         (abstract-eval-stx val-expr env-prime)))
+         (abstract-eval-expr val-expr env-prime)))
      (cond
       [(stream-ormap ⊥? vals) ⊥]
       [else
@@ -138,22 +164,37 @@
              [v (in-stream vals)])
          (define loc (environment-ref env-prime id))
          (store-set! loc v))
-       (abstract-eval-stx #'body env-prime)])]
-    ; TODO:
-    ; [(set! id expr) (error "not implemented")]
+       (abstract-eval-expr #'body env-prime)])]
+
+    [(set! id expr) (error "not implemented")]
+    ;  (define loc (environment-ref env #'id))
+    ;  (define old-v (store-ref loc))
+    ;  (define new-v (abstract-eval-epxr #'expr env))
+    ;  (dynamic-wind
+    ;   (lambda () (store-set! loc new-v))
+    ;   (lambda () ???)
+    ;   (lambda () (store-set! loc old-v)))]
+
     [(quote datum) ((property-from-syntax) #'datum)]
-    ; [(quote-syntax datum) (error "not implemented")]
-    ; [(with-continuation-mark . _) (error "not implemented")]
+
+    [(quote-syntax datum) (error "not implemented")]
+    [(quote-syntax datum #:local) (error "not implemented")]
+    [(with-continuation-mark . _) (error "not implemented")]
+
     [(#%plain-app proc-expr arg-expr ...)
-     (define proc (abstract-eval-stx #'proc-expr env))
+     (define proc (abstract-eval-expr #'proc-expr env))
      (define args
        (for/stream ([arg-expr (in-syntax #'(arg-expr ...))])
-         (abstract-eval-stx arg-expr env)))
+         (abstract-eval-expr arg-expr env)))
      (cond
       [(or (⊥? proc) (stream-ormap ⊥? args)) ⊥]
       [else (abstract-apply proc (stream->list args))])]
-    [(#%top . id) (abstract-eval-stx #'id env)]))
-    ; [(#%variable-reference . _) (error "not implemented")]))
+
+    [(#%top . id) (abstract-eval-expr #'id env)]
+
+    [(#%variable-reference id) (error "not implemented")]
+    [(#%variable-reference (#%top . id)) (error "not implemented")]
+    [(#%variable-reference) (error "not implemented")]))
 
 (define (abstract-apply proc args)
   (cond
@@ -183,7 +224,7 @@
            (hash-set (current-trace) lam
                      (list args-prime result backtrack)))
          (parameterize ([current-trace trace-prime])
-           (abstract-eval-stx #'body env-prime)))
+           (abstract-eval-expr #'body env-prime)))
       ⊥)]
      ; Subsequent call to procedure with compatible arguments
      [(andmap <=? args prev-args) result]
