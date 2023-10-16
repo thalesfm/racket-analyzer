@@ -1,6 +1,7 @@
 #lang racket
 
-(provide abstract-eval
+(provide closure?
+         abstract-eval
          abstract-eval-syntax)
 
 (require syntax/free-vars

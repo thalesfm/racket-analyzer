@@ -1,209 +1,267 @@
 #lang racket
 
-(provide (struct-out Bot)
-         (struct-out Truthy)
-         (struct-out Literal)
-         (struct-out Char)
-         (struct-out Null)
-         (struct-out String)
-         (struct-out Symbol)
-         (struct-out Void)
-         (struct-out Number)
-         (struct-out Real)
-         (struct-out Rational)
-         (struct-out Integer)
-         (struct-out Exact-Nonnegative-Integer)
-         (struct-out Pairof)
-         (struct-out Listof))
+(provide Any Any?
+         Nothing Nothing?
+
+         Boolean Boolean?
+         True True?
+         False False?
+
+         Number Number?
+         Real Real?
+         Rational Rational?
+         Integer Integer?
+         Exact-Nonnegative-Integer Exact-Nonnegative-Integer?
+
+         Null Null?
+         Pairof Pairof?
+         Listof Listof?
+
+         Char Char?
+         String String?
+         Symbol Symbol?
+         Void Void?)
+
 
 (provide
  (contract-out
-  [type?         (-> any/c boolean?)]
-  [datum->type   (-> any/c type?)]
-  [type->datum   (-> type? any/c)]
-  [type<=?       (-> type? type? boolean?)]
-  [type-lub      (-> type? type? type?)]
-  [infer-type    (-> any/c any)]))
+  [type?        (-> any/c boolean?)]
+  [type-of      (-> any/c (or/c type? #f))]
+  [type=?       (-> (or/c type? T?) (or/c type? T?) boolean?)]
+  [type<=?      (-> (or/c type? T?) (or/c type? T?) boolean?)]
+  [type>=?      (-> (or/c type? T?) (or/c type? T?) boolean?)]
+  [type-lub     (-> (or/c type? T?) (or/c type? T?) type?)]
+  [compute-type (-> any/c any)]))
 
-(require "abstract-eval.rkt"
-         "common.rkt"
-         "environment.rkt")
+(require (for-syntax racket/syntax)
+         "abstract-eval.rkt"
+         "common.rkt")
 
 (struct type () #:transparent)
 
-;(struct Top type () #:transparent)
-(struct Bot type () #:transparent)
+(define-syntax (define-type stx)
+  (syntax-case stx ()
+    ; Base type
+    [(_ type-id)
+     (identifier? #'type-id)
+     (with-syntax ([pred-id (format-id #'type-id "~a?" (syntax-e #'type-id))])
+       #'(begin
+           (struct ctor-id type ()
+                   #:transparent
+                   #:reflection-name 'type-id
+                   #:omit-define-syntaxes)
+           (define type-id (ctor-id))
+           (define (pred-id v) (eq? v type-id))))]
+    ; Type constructor
+    [(_ (ctor-id field ...))
+     #'(struct ctor-id type (field ...) #:transparent)]))
 
-(struct Truthy type () #:transparent)
+; HACK
+(define Any T)
+(define Any? T?)
+(define-type Nothing)
 
-(struct Literal type (value) #:transparent)
+(define-type Boolean)
+(define-type True)
+(define-type False)
 
-(struct Char type () #:transparent)
-(struct Null type () #:transparent)
-(struct String type () #:transparent)
-(struct Symbol type () #:transparent)
-(struct Void type () #:transparent)
+(define-type Number)
+(define-type Real)
+(define-type Rational)
+(define-type Integer)
+(define-type Exact-Nonnegative-Integer)
 
-;; No boolean datatype because we have `Truthy`
-;; Ommited built-in datatypes: bytes, byte strings, keywords, vectors,
-;; hash tables, boxes, and undefined (as well as user defined structs)
+(define-type Null)
+(define-type (Pairof car-type cdr-type))
+(define-type (Listof elem-type))
 
-(struct Number type () #:transparent)
-(struct Real type () #:transparent)
-(struct Rational type () #:transparent)
-(struct Integer type () #:transparent)
-(struct Exact-Nonnegative-Integer type () #:transparent)
+(define-type String)
+(define-type Char)
+(define-type Symbol)
+(define-type Void)
 
-;; TODO: Check that arguments are `type?` when invoked
-(struct Pairof type (car cdr) #:transparent)
-(struct Listof type (element) #:transparent)
-;; (define-type List (Listof Top))
+; Ommited build-in datatypes: byte strings, regular expressions,
+; keywords, mutable pairs and lists, vectors, stencil vectors, boxes,
+; hash tables, sets, and undefined. Also ommited are user-defined structures.
 
-(define check-literal
-  (disjoin boolean? number? char? string? symbol?))
+(define (type-of v)
+  (cond
+   ; Booleans
+   [(eq? v #t) True]
+   [(eq? v #f) False]
+   [(boolean? v) Boolean]
 
-(define/match (datum->type v)
-  [(v) #:when (check-literal v) (Literal v)]
-  [((? void?)) (Void)]
-  [((? null?)) (Null)]
-  [((cons a d))
-   (Pairof (datum->type a)
-           (datum->type d))]
-  [(v)
-   (raise-arguments-error 'datum->type "unsuported datum" "v" v)])
+   ; Numbers
+   [(exact-nonnegative-integer? v) Exact-Nonnegative-Integer]
+   [(integer? v) Integer]
+   [(rational? v) Rational]
+   [(real? v) Real]
+   [(number? v) Number]
 
-(define/match (type->datum t)
-  [((Literal v)) v]
-  [((Void)) (void)]
-  [((Null)) null]
-  [((Pairof car cdr))
-   (cons (type->datum car)
-         (type->datum cdr))]
-  [(t)
-   (raise-arguments-error 'type->datum "type can't be concretized" "τ" t)])
+   ; Pairs and lists
+   [(null? v) Null]
+   [(pair? v) (Pairof (type-of (car v)) (type-of (cdr v)))]
+
+   ; Misc.
+   [(string? v) String]
+   [(char? v) Char]
+   [(symbol? v) Symbol]
+   [(void? v) Void]
+
+   [else (raise-arguments-error 'type-of "unsuported datum" "v" v)]))
 
 ;; Returns the supertype of `t` when one exists,
-;; returns false when none (or multiple) exist
-(define (super t)
-  (match t
-    [(Literal #f) T]
-    [(Literal #t) (Truthy)]
+;; returns `#f` when none (or multiple) exist
+(define (supertype t)
+  (cond
+   ; Booleans
+   [(True? t) Boolean]
+   [(False? t) Boolean]
+   [(Boolean? t) Any]
 
-    [(Literal (? char?))     (Char)]
-    [(Literal (? string?))   (String)]
-    [(Literal (? symbol?))   (Symbol)]
-    [(Literal (? void?))     (Void)]
+   ; Numbers
+   [(Number? t) Any]
+   [(Real? t) Number]
+   [(Rational? t) Real]
+   [(Integer? t) Rational]
+   [(Exact-Nonnegative-Integer? t) Integer]
 
-    [(Literal (? exact-nonnegative-integer?))
-     (Exact-Nonnegative-Integer)]
-    [(Literal (? integer?))  (Integer)]
-    [(Literal (? rational?)) (Rational)]
-    [(Literal (? real?))     (Real)]
-    [(Literal (? number?))   (Number)]
+   ; Pairs and lists
+   [(Null? t) (Listof Nothing)]
+   [(and (Listof? t) (supertype (Listof-elem-type t))) =>
+    (lambda (super-t) (Listof super-t))]
 
-    [(Char)     (Truthy)]
-    [(String)   (Truthy)]
-    [(Symbol)   (Truthy)]
-    [(Void)     (Truthy)]
+   ; Misc.
+   [(String? t) Any]
+   [(Char? t) Any]
+   [(Symbol? t) Any]
+   [(Void? t) Any]
 
-    [(Truthy)   T]
-    [(Number)   (Truthy)]
-    [(Real)     (Number)]
-    [(Rational) (Real)]
-    [(Integer)  (Rational)]
-    [(Exact-Nonnegative-Integer) (Integer)]
+   [else #f]))
 
-    [(Null) (Listof (Bot))]
-    [(Listof t) (=> next)
-     (let ([sup (super t)])
-       (if sup (Listof sup) (next)))]
+(define (type=? t1 t2)
+  (cond
+   [(eq? t1 t2) #t]
 
-    [_ #f]))
+   ; Pairs and lists
+   [(and (Listof? t1) (Listof? t2))
+    (match-define (Listof e1) t1)
+    (match-define (Listof e2) t2)
+    (type=? e1 e2)]
+   [(and (Pairof? t1) (Pairof? t2))
+    (match-define (Pairof a1 d1) t1)
+    (match-define (Pairof a2 d2) t2)
+    (and (type=? a1 a2)
+         (type=? d1 d2))]
 
-(define/match (type<=? t1 t2)
-  [(_ (? T?)) #t]
-  [((Bot) _) #t]
+   [else #f]))
 
-  [((== Null)      (Listof _ )   ) #t]
-  [((Listof t1)    (Listof t2)   ) (type<=? t1 t2)]
-  [((Pairof a  d ) (Listof t )   ) (and (type<=? a t)
-                                        (type<=? d (Listof t)))]
-  [((Pairof a1 d1) (Pairof a2 d2)) (and (type<=? a1 a2)
-                                        (type<=? d1 d2))]
+(define (type<=? t1 t2)
+  (cond
+   [(eq? t1 t2) #t]
 
-  [(t1 t2) #:when (equal? t1 t2) #t]
-  [((Literal _) (Literal _)) #f]
-  [((Literal _) _) (type<=? (super t1) t2)]
-  [(_ (Literal _)) (type<=? t1 (super t2))]
-  [(t1 t2) (=> next)
-   (let ([sup (super t1)])
-     (if sup (type<=? sup t2) (next)))]
+   ; Top and bottom
+   [(Any? t2) #t]
+   [(Any? t1) #f]
+   [(Nothing? t1) #t]
+   [(Nothing? t2) #f]
 
-  [(_  _ ) #f])
+   ; Pairs and lists
+   [(and (Null? t1) (Listof? t2)) #t]
+   [(and (Listof? t1) (Listof? t2))
+    (type<=? (Listof-elem-type t1) (Listof-elem-type t2))]
+   [(and (Pairof? t1) (Listof? t2))
+    (and (type<=? (Pairof-car-type t1) (Listof-elem-type t2))
+         (type<=? (Pairof-cdr-type t1) t2))]
+   [(and (Pairof? t1) (Pairof? t2))
+    (and (type<=? (Pairof-car-type t1) (Pairof-car-type t2))
+         (type<=? (Pairof-cdr-type t1) (Pairof-cdr-type t2)))]
 
-(define/match (type-lub t1 t2)
-  [((? T?) _       ) T]
-  [(_        (? T?)) T]
-  [((Bot)    _    ) t2]
-  [(_        (Bot)) t1]
+   ; Misc. base types
+   [(supertype t1) =>
+    (lambda (super-t1) (type<=? super-t1 t2))]
+   [else #f]))
 
-  [((Listof t1)    (Listof t2)   ) (Listof (type-lub t1 t2))]
-  [((Pairof a1 d1) (Pairof a2 d2)) (Pairof (type-lub a1 a2) (type-lub d1 d2))]
-  [((Pairof a  d ) (Null)        ) (type-lub (Pairof a d) (Listof (Bot)))]
-  [((Null)         (Pairof a  d )) (type-lub (Pairof a d) (Listof (Bot)))]
-  [((Pairof a  d ) (Listof t )   )
-   (match (type-lub d (Listof t))
-     [(Listof t*) (Listof (type-lub a t*))]
-     [_           (Truthy)])]
-  [((Listof t )    (Pairof a  d ))
-   (match (type-lub d (Listof t))
-     [(Listof t*) (Listof (type-lub a t*))]
-     [_           (Truthy)])]
+(define (type>=? t1 t2)
+  (type<=? t2 t1))
 
-  ;; These cases are reduntant but avoid expensive `type<=?` comparisons
-  [((Pairof _  _ ) t             ) (if t (Truthy) T)]
-  [(t              (Pairof _  _ )) (if t (Truthy) T)]
+(define (type-lub t1 t2)
+  (cond
+   [(eq? t1 t2) t1]
 
-  [(t1 t2) #:when (equal?  t1 t2) t1]
-  [((Literal _) (Literal _)) (type-lub (super t1) (super t2))]
-  [((Literal _) _          ) (type-lub (super t1) t2)]
-  [(_           (Literal _)) (type-lub t1         (super t2))]
-  [(t1 t2) #:when (type<=? t1 t2) t2]
-  [(t1 t2) #:when (type<=? t2 t1) t1]
-  [(t1 t2) (Truthy)])
+   ; Top and bottom
+   [(or (Any? t1) (Any? t2)) Any]
+   [(Nothing? t1) t2]
+   [(Nothing? t2) t1]
 
-(define (constant? v)
-  (if (Pairof? v)
-      (and (Literal? (car v))
-           (Literal? (cdr v)))
-      (Literal? v)))
+   ; Pairs and lists
+   [(and (Pairof? t1) (Pairof? t2))
+    (match-define (Pairof a1 d1) t1)
+    (match-define (Pairof a2 d2) t2)
+    (Pairof (type-lub a1 a2) (type-lub d1 d2))]
+   [(and (Pairof? t1) (Null? t2)) (type-lub t1 (Listof Nothing))]
+   [(and (Null? t1) (Pairof? t2)) (type-lub (Listof Nothing) t2)]
+   [(and (Pairof? t1) (Listof? t2))
+    (match-define (Pairof a1 d1) t1)
+    (match (type-lub d1 t2)
+      [(Listof t*) (Listof (type-lub a1 t*))]
+      [_ Any])] ; TODO: This could be more precise
+   [(and (Listof? t1) (Pairof? t2))
+    (match-define (Pairof a2 d2) t2)
+    (match (type-lub t1 d2)
+      [(Listof t*) (Listof (type-lub t* a2))]
+      [_ Any])] ; TODO: This could be more precise
+  [(or (Pairof? t1) (Pairof? t2)) Any]
 
-(define (lift proc)
-  (lambda args
-    (if (andmap constant? args)
-        (datum->type (apply proc (map Literal-value args)))
-        T)))
+  ; Misc. base types
+  [(type<=? t1 t2) t2]
+  [(type<=? t2 t1) t1]
+  [else Any]))
 
+; TODO: Refactor this using macros
 (define (make-namespace)
   (define namespace (make-base-namespace))
   (define (set-constant-value! sym v)
     (namespace-set-variable-value! sym v #t namespace #t))
-  (set-constant-value! '+ (lift +))
-  (set-constant-value! '- (lift -))
-  (set-constant-value! '* (lift *))
-  (set-constant-value! '/ (lift /))
-  (set-constant-value! '= (lift =))
-  (set-constant-value! 'map (lift map))
-  (set-constant-value! 'read (lambda () T))
+  (set-constant-value! '+
+    (lambda ts
+      (if (andmap (curryr type<=? Number) ts)
+          (foldl type-lub (type-of 0) ts)
+          ⊥)))
+  (set-constant-value! '-
+    (lambda (t . ts)
+      (if (andmap (curryr type<=? Number) (cons t ts))
+          (foldl type-lub Integer (cons t ts))
+          ⊥)))
+  (set-constant-value! '*
+    (lambda ts
+      (if (andmap (curryr type<=? Number) ts)
+          (foldl type-lub (type-of 1) ts)
+          ⊥)))
+  (set-constant-value! '/
+    (lambda (t . ts)
+      (if (andmap (curryr type<=? Number) (cons t ts))
+          (foldl type-lub Rational (cons t ts))
+          ⊥)))
+  (set-constant-value! '=
+    (lambda (t . ts)
+      (if (andmap (curryr type<=? Number) (cons t ts))
+          (if (null? ts) True Boolean)
+          ⊥)))
+  (set-constant-value! 'map
+    ; HACK: Should check the type of `proc-t`
+    (lambda (_proc-t . ts)
+      (if (andmap (curryr type<=? (Listof Any)) ts) (Listof Any) ⊥)))
+  (set-constant-value! 'read (lambda () Any))
   (set-constant-value! 'error (lambda () ⊥))
   namespace)
 
-(define (infer-type expr)
+(define (compute-type expr)
   (parameterize
     ([property-from-syntax
-        (lambda (stx) (datum->type (syntax->datum stx)))]
+        (lambda (stx) (type-of (syntax->datum stx)))]
      [property-stronger?
-        (lambda (v1 v2 recur-proc) (type<=? v1 v2))]
+        (lambda (t1 t2 _recur-proc) (type<=? t1 t2))]
      [property-combine
-        (lambda (v1 v2 recur-proc) (type-lub v1 v2))])
+        (lambda (t1 t2 _recur-proc) (type-lub t1 t2))])
     (abstract-eval expr (make-namespace))))
