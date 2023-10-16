@@ -27,10 +27,10 @@
  (contract-out
   [type?        (-> any/c boolean?)]
   [type-of      (-> any/c (or/c type? #f))]
-  [type=?       (-> (or/c type? T?) (or/c type? T?) boolean?)]
-  [type<=?      (-> (or/c type? T?) (or/c type? T?) boolean?)]
-  [type>=?      (-> (or/c type? T?) (or/c type? T?) boolean?)]
-  [type-lub     (-> (or/c type? T?) (or/c type? T?) type?)]
+  [type=?       (-> (or/c type? T? ⊥?) (or/c type? T? ⊥?) boolean?)]
+  [type<=?      (-> (or/c type? T? ⊥?) (or/c type? T? ⊥?) boolean?)]
+  [type>=?      (-> (or/c type? T? ⊥?) (or/c type? T? ⊥?) boolean?)]
+  [type-lub     (-> (or/c type? T? ⊥?) (or/c type? T? ⊥?) type?)]
   [compute-type (-> any/c any)]))
 
 (require (for-syntax racket/syntax)
@@ -59,7 +59,8 @@
 ; HACK
 (define Any T)
 (define Any? T?)
-(define-type Nothing)
+(define Nothing ⊥)
+(define Nothing? ⊥?)
 
 (define-type Boolean)
 (define-type True)
@@ -72,8 +73,8 @@
 (define-type Exact-Nonnegative-Integer)
 
 (define-type Null)
-(define-type (Pairof car-type cdr-type))
-(define-type (Listof elem-type))
+(define-type (Pairof s t))
+(define-type (Listof t))
 
 (define-type String)
 (define-type Char)
@@ -128,8 +129,10 @@
 
    ; Pairs and lists
    [(Null? t) (Listof Nothing)]
-   [(and (Listof? t) (supertype (Listof-elem-type t))) =>
-    (lambda (super-t) (Listof super-t))]
+   [(Listof? t)
+    (match-define (Listof e) t)
+    (define super-e (supertype e))
+    (if super-e (Listof super-e) #f)]
 
    ; Misc.
    [(String? t) Any]
@@ -169,13 +172,19 @@
    ; Pairs and lists
    [(and (Null? t1) (Listof? t2)) #t]
    [(and (Listof? t1) (Listof? t2))
-    (type<=? (Listof-elem-type t1) (Listof-elem-type t2))]
+    (match-define (Listof e1) t1)
+    (match-define (Listof e2) t2)
+    (type<=? e1 e2)]
    [(and (Pairof? t1) (Listof? t2))
-    (and (type<=? (Pairof-car-type t1) (Listof-elem-type t2))
-         (type<=? (Pairof-cdr-type t1) t2))]
+    (match-define (Pairof a1 d1) t1)
+    (match-define (Listof e1) t2)
+    (and (type<=? a1 e1)
+         (type<=? d1 t2))]
    [(and (Pairof? t1) (Pairof? t2))
-    (and (type<=? (Pairof-car-type t1) (Pairof-car-type t2))
-         (type<=? (Pairof-cdr-type t1) (Pairof-cdr-type t2)))]
+    (match-define (Pairof a1 d1) t1)
+    (match-define (Pairof a2 d2) t2)
+    (and (type<=? a1 a2)
+         (type<=? d1 d2))]
 
    ; Misc. base types
    [(supertype t1) =>
