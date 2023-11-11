@@ -17,10 +17,14 @@
          "abstract-eval.rkt"
          "common.rkt")
 
-(struct base-type (name) #:transparent)
+(struct type (ctor-id args) #:transparent)
 
-(define-syntax-rule (define-base-type name)
-  (define name (base-type 'name)))
+(define-syntax (define-type stx)
+  (syntax-case stx ()
+    [(_ name-id)
+     #'(define name-id (type 'name-id '()))]
+    [(_ (ctor-id . args))
+     #'(define (ctor-id . args) (type 'name args))]))
 
 (struct type-union (set) #:transparent)
 
@@ -63,25 +67,25 @@
 
 ;; Corresponds to the `flonum?` predicate
 ;; Abbreviated w.r.t. full type: does not distinguish +0.0, -0.0, +nan.0, etc.
-(define-base-type Float)
+(define-type Float)
 
-(define-base-type Negative-Rational-Not-Integer)
-(define-base-type Positive-Rational-Not-Integer)
-(define-base-type Negative-Integer)
-(define-base-type Positive-Integer)
+(define-type Negative-Rational-Not-Integer)
+(define-type Positive-Rational-Not-Integer)
+(define-type Negative-Integer)
+(define-type Positive-Integer)
 
 ;; Pairs and lists
 
-(define-base-type Null)
-(struct Pairof (s t) #:transparent)
-(struct Listof (t) #:transparent)
+(define-type Null)
+(define-type (Pairof a b))
+(define-type (Listof a))
 
 ;; Other datatypes
 
-(define-base-type String)
-(define-base-type Char)
-(define-base-type Symbol)
-(define-base-type Void)
+(define-type String)
+(define-type Char)
+(define-type Symbol)
+(define-type Void)
 
 ;; Omitted build-in datatypes: byte strings, regular expressions,
 ;; keywords, mutable pairs and lists, vectors, stencil vectors, boxes,
@@ -90,12 +94,22 @@
 (define (type-of v)
   (cond
    ;; Booleans
-   [(eq? v #t) #t]
-   [(eq? v #f) #f]
+   [(equal? v #t) True]
+   [(equal? v #f) False]
 
    ;; Numbers
+   [(equal? v 0) Zero]
+   [(equal? v 1) One]
    [(exact-nonnegative-integer? v) Natural]
+   ;[(equal? v +nan.0) Float-Nan]
+   ;[(equal? v -0.0) Float-Negative-Zero]
+   ;[(equal? v +0.0) Float-Positive-Zero]
+   [(flonum? v) Float]
+   ;[... Negative-Integer]
+   ;[... Positive-Integer]
    [(integer? v) Integer]
+   ;[... Negative-Rational-Not-Integer]
+   ;[... Positive-Rational-Not-Integer]
    [(rational? v) Exact-Rational]
    [(real? v) Real]
    [(number? v) Number]
@@ -115,18 +129,12 @@
 (define (type=? t1 t2)
   (cond
    [(eq? t1 t2) #t]
-   [(and (base-type? t1) (base-type? t2))
-    (eq? (base-type-name t1) (base-type-name t2))]
+   [(and (type? t1) (type? t2))
+    (and (eq? (type-ctor-id t1) (type-ctor-id t2))
+         (andmap type=? (type-args t1) (type-args t2)))]
+   ;; FIXME: Only works for unions of base types
    [(and (type-union? t1) (type-union? t2))
     (set=? (type-union-set t1) (type-union-set t2))]
-   [(and (Pairof? t1) (Pairof? t2))
-    (match-define (Pairof a1 d1) t1)
-    (match-define (Pairof a2 d2) t2)
-    (and (type=? a1 a2) (type=? d1 d2))]
-   [(and (Listof? t1) (Listof? t2))
-    (match-define (Listof e1) t1)
-    (match-define (Listof e2) t2)
-    (type=? e1 e2)]
    [else #f]))
 
 (define (type<=? t1 t2)
@@ -138,21 +146,22 @@
    [(Nothing? t1) #t]
 
    ;; Base types and type unions
-   [(and (base-type? t1) (base-type? t2))
-    (eq? (base-type-name t1) (base-type-name t2))]
+   [(and (type? t1) (type? t2))
+    (and (eq? (type-ctor-id t1) (type-ctor-id t2))
+         (andmap type<=? (type-args t1) (type-args t2)))]
+   ;; FIXME: Only works for unions of base types
    [(and (type-union? t1) (type-union? t2))
     (subset? (type-union-set t1) (type-union-set t2))]
 
    ;; Pairs and lists
-   [(and (type=? t1 Null) (Listof? t2)) #t]
-   [(and (Pairof? t1) (Pairof? t2))
-    (and (type<=? (Pairof-s t1) (Pairof-s t2))
-         (type<=? (Pairof-t t1) (Pairof-t t2)))]
-   [(and (Pairof? t1) (Listof? t2))
-    (and (type<=? (Pairof-s t1) (Listof-t t2))
-         (type<=? (Pairof-t t1) t2))]
-   [(and (Listof? t1) (Listof? t2))
-    (type<=? (Listof-t t1) (Listof-t t2))]
+   [(and (type=? t1 Null)
+         (eq? (type-ctor-id t2) 'Listof))
+    #t]
+   [(and (eq? (type-ctor-id t1) 'Pairof)
+         (eq? (type-ctor-id t2) 'Listof))
+    (match-define (type 'Pairof (list a d)) t1)
+    (match-define (type 'Listof (list e)) t2)
+    (and (type<=? a e) (type<=? d t2))]
 
    [else #f]))
 
@@ -162,7 +171,10 @@
 (define (type>=? t1 t2)
   (type<=? t2 t1))
 
+;; TODO
 (define (type-lub t1 t2)
+  (error "not implemented")
+  #;
   (cond
    [(eq? t1 t2) t1]
 
