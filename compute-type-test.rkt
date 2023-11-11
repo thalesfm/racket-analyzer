@@ -42,7 +42,7 @@
  Boolean)
 
 (typecheck-=? '(read) Any)
-(typecheck-pred ⊥? '(+ (read) 10))
+(typecheck-=? '(+ (read) 10) Number)
 
 (typecheck-=? '(if #t 'ok (read)) Symbol)
 (typecheck-=? '(if #f (read) 'ok) Symbol)
