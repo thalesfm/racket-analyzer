@@ -1,18 +1,12 @@
-## Requirements for program verification
+## MVP
 
-- Track/report errors detected by the analysis
-- Check contracts when calling primitive procedures
+- Updated unit tests
+- "Generic" procedure element
+- Least upper bound of procedures
+- Backjumping for recursive procedures
+- Fixed-point iteration for recursive procedures
 
 ## Nice-to-haves
 
-- Limit evaluation time for unit tests
-- Implement fixpoint iteration more efficiently (i.e. avoid unless necessary)
-- Split monolithic analysis domain into smaller, simpler domains
-    - Domain of constants (i.e. flat domain)
-    - Domain of types
-    - Domain composition? (e.g. constants + types)
-- Implement more primitive procedures
-- Check performance impact of using contracts?
-- Replace streams with exceptions for error handling?
-- Make it so higher-order primitive procedures work with the analysis?
-    - Make closures callable using `prop:procedure`
+- Error messages (⊥ family)
+- Implement fixed-point iteration more efficiently

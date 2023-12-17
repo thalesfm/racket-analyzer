@@ -1,10 +1,9 @@
-#lang racket
+#lang racket/base
 
-(provide empty-environment
-         (rename-out [bound-id-table-ref environment-ref]
-                     [bound-id-table-set environment-set]
-                     [bound-id-table-keys environment-keys]))
+(provide
+ (rename-out
+  [make-immutable-bound-id-table make-ρ]
+  [bound-id-table-ref ρ-ref]
+  [bound-id-table-set ρ-set]))
 
 (require syntax/id-table)
- 
-(define empty-environment (make-immutable-bound-id-table))

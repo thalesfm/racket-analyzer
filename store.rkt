@@ -1,6 +1,11 @@
 #lang racket
 
-(provide (rename-out [make-ephemeron-hasheq make-store]
-                     [hash-ref store-ref]
-                     [hash-set! store-set!]
-                     [hash-update! store-update!]))
+(provide σ-ref σ-set!)
+
+(define σ (make-ephemeron-hasheq))
+
+(define (σ-ref key . maybe-failure-result)
+  (apply hash-ref σ key maybe-failure-result))
+
+(define (σ-set! key v)
+  (hash-set! σ key v))

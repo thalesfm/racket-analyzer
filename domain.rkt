@@ -1,45 +1,40 @@
 #lang racket
 
-(provide (all-defined-out))
-
-(provide T T?
-         ⊥ ⊥?
-         ℕ ℕ?
+(provide T
+         T?
+         ⊥ (rename-out [⊥ B])
+         ⊥? (rename-out [⊥? B?])
+         ℕ (rename-out [ℕ N])
+         ℕ? (rename-out [ℕ? N?])
          in-domain?
-         make-introspectable-procedure
+         (struct-out closure)
          <=?
          lub)
 
-(require racket/lazy-require
-         syntax/free-vars
-         "environment.rkt")
+(require syntax/free-vars
+         "environment.rkt"
+         "store.rkt")
 
 (define T 'T)
-(define ⊥ '⊥)
+; HACK: The definition below works the same when called like `(⊥ message)` or when
+; used directly like `⊥`. Temporary stub while error messages are not implemented.
+(define (⊥ _) ⊥)
 (define ℕ 'ℕ)
 
 (define (T? v) (equal? v T))
 (define (⊥? v) (equal? v ⊥))
 (define (ℕ? v) (equal? v ℕ))
 
+;; TODO: Add false
 ;; TODO: Generic procedures/arrows
 
-(struct introspectable-procedure (source closure proc)
-  #:extra-constructor-name make-introspectable-procedure
-  #:property prop:procedure (struct-field-index proc))
+(struct closure (source-syntax environment)
+  #:constructor-name make-closure)
 
-(define (procedure-source proc)
-  (cond
-   [(introspectable-procedure? proc) (introspectable-procedure-source proc)]
-   [else #f]))
-
-(define (procedure-closure proc)
-  (cond
-   [(introspectable-procedure? proc) (introspectable-procedure-closure proc)]
-   [else #f]))
+(define closure-label closure-source-syntax)
 
 (define (in-domain? v)
-  (or (T? v) (⊥? v) (ℕ? v) (natural? v) (procedure? v)))
+  (or (T? v) (⊥? v) (ℕ? v) (natural? v) (false? v) (procedure? v) (closure? v)))
 
 (define (<=? d1 d2)
   (cond
@@ -47,25 +42,20 @@
    [(T? d2) #t]
    [(⊥? d1) #t]
    [(and (natural? d1) (ℕ? d2)) #t]
-   ;; TODO: (-> d1 r1) . <=? . (-> d2 r2)
-   ;; TODO: procedure-closure . <=? . (-> d r)
-   [(and (procedure? d1) (procedure? d2)) (procedure<=? d1 d2)]
+   [(and (closure? d1) (closure? d2)) (closure<=? d1 d2)]
    [else #f]))
 
-(define (procedure<=? proc1 proc2)
-  (or (eq? proc1 proc2)
-      (and (introspectable-procedure? proc1)
-           (introspectable-procedure? proc2)
-           (eq? (procedure-source proc1)
-                (procedure-source proc2))
-           (procedure-closure-contents<=? proc1 proc2))))
+(define (closure<=? c1 c2)
+  (or (eq? c1 c2)
+      (and (eq? (closure-label c1)
+                (closure-label c2))
+           (closure-environment<=? c1 c2))))
 
-;; TODO: Double check this works for recursive procedures
-(define (procedure-closure-contents<=? proc1 proc2)
-  (define ρ1 (procedure-closure proc1))
-  (define ρ2 (procedure-closure proc2))
-  (for/and ([id (in-list (free-vars (procedure-source proc1)))])
-    (<=? (dict-ref ρ1 id ⊥) (dict-ref ρ2 id ⊥))))
+(define (closure-environment<=? c1 c2)
+  (define env1 (closure-environment c1))
+  (define env2 (closure-environment c2))
+  (for/and ([id (in-list (free-vars (closure-source-syntax c1)))])
+    (<=? (ρ-ref env1 id ⊥) (ρ-ref env2 id ⊥))))
 
 (define (lub d1 d2)
   (cond
@@ -74,27 +64,25 @@
    [(⊥? d1) d2]
    [(⊥? d2) d1]
    [(and (<=? d1 ℕ) (<=? d2 ℕ)) ℕ]
-   [(and (procedure? d1) (procedure? d2)) (procedure-lub d1 d2)]
+   [(and (closure? d1) (closure? d2)) (closure-lub d1 d2)]
    [else T]))
 
-;; TODO: Double check this works for recursive procedures
-(define (procedure-lub proc1 proc2)
+;; FIXME: Will enter an infinite loop when both arguments are recursive procedures which are not `eq?`
+;; but have the same label (I think)
+(define (closure-lub c1 c2)
   (cond
-   [(eq? proc1 proc2) proc1]
-   [(and (introspectable-procedure? proc1)
-         (introspectable-procedure? proc2)
-         (eq? (procedure-source proc1)
-              (procedure-source proc2)))
-    (make-introspectable-procedure (procedure-source proc1)
-                                   (procedure-closure-contents-lub proc1 proc2)
-                                   (lambda _ (error "not implemented")))]
+   [(eq? (closure-label c1) (closure-label c2))
+    (make-closure (closure-source-syntax c1)
+                  (closure-environment-lub c1 c2))]
    [else T]))
 
-(define (procedure-closure-contents-lub proc1 proc2)
-    (define ρ1 (procedure-closure proc1))
-    (define ρ2 (procedure-closure proc2))
-    (for/fold ([ρ- empty-environment])
-              ([id (in-list (free-vars (procedure-source proc1)))])
-      (define d1 (dict-ref ρ1 id ⊥))
-      (define d2 (dict-ref ρ2 id ⊥))
-      (dict-set ρ- id (lub d1 d2))))
+(define (closure-environment-lub c1 c2)
+    (define ρ1 (closure-environment c1))
+    (define ρ2 (closure-environment c2))
+    (for/fold ([ρ- (make-ρ)])
+              ([id (in-list (free-vars (closure-source-syntax c1)))])
+      (define d1 (σ-ref (ρ-ref ρ1 id) (lambda () ⊥)))
+      (define d2 (σ-ref (ρ-ref ρ2 id) (lambda () ⊥)))
+      (define location (gensym (syntax-e id)))
+      (σ-set! location (lub d1 d2))
+      (ρ-set ρ- id location)))
