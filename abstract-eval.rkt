@@ -3,9 +3,7 @@
 (provide abstract-eval
          abstract-eval-syntax)
 
-(require racket/syntax
-         syntax/free-vars
-         syntax/parse
+(require syntax/parse
          "domain.rkt"
          "environment.rkt"
          "primitives.rkt"
@@ -24,6 +22,20 @@
 (define-conventions id-suffix [#rx"(^|-)id$" id])
 (define-conventions expr-suffix [#rx"(^|-)expr$" expr])
 
+(define (raise-user-error message)
+  (raise (exn:fail:user message (current-continuation-marks))))
+
+(define (raise-undefined-error id)
+  (raise-user-error
+   (format "~a: undefined or used before initialization" (syntax-e id))))
+
+(define (catch-user-error thunk)
+  (with-handlers ([exn:fail:user? (λ (exn) ⊥)])
+    (thunk)))
+
+(define (re-raise-user-error d)
+  (if (⊥? d) (raise-user-error "user error") d))
+
 (define (abstract-eval-kernel-syntax stx [ρ (make-ρ)])
   (define aeval abstract-eval-kernel-syntax)
   (syntax-parse stx
@@ -31,10 +43,13 @@
     #:literal-sets (kernel-literals)
 
     [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical))) ; locally bound identifier
-     (σ-ref (ρ-ref ρ #'id #f) (lambda () (⊥ "undefined")))]
+     (σ-ref (ρ-ref ρ #'id (λ () (raise-undefined-error #'id)))
+            (λ () (raise-undefined-error #'id)))]
 
     [id ; top-level, module-level, or unbound identifier
-     (namespace-variable-value (syntax-e #'id) #t (lambda () (⊥ "undefined")))]
+     (namespace-variable-value (syntax-e #'id)
+                               #t
+                               (λ () (raise-undefined-error #'id)))]
 
     [(#%plain-lambda (_id ...) _body)
      (make-closure this-syntax ρ)]
@@ -42,44 +57,41 @@
     [(if ~! test-expr then-expr else-expr)
      (define v (aeval #'test-expr ρ))
      (cond
-      [(⊥?  v)    v]
-      [(T?  v)    (lub (aeval #'then-expr ρ) (aeval #'else-expr ρ))]
+      [(T?  v)
+       (re-raise-user-error
+        (lub (catch-user-error (λ () (aeval #'then-expr ρ)))
+             (catch-user-error (λ () (aeval #'else-expr ρ)))))]
       [(eq? v #f) (aeval #'else-expr ρ)]
       [else       (aeval #'then-expr ρ)])]
   
     [(let-values ~! ([(id) val-expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...))) "duplicate identifier"
-     (let/ec break
-       (define ρ*
-         (for/fold ([ρ* ρ])
-                   ([id (in-syntax #'(id ...))]
-                    [val-expr (in-syntax #'(val-expr ...))])
-           (define v (aeval val-expr ρ))
-           (when (⊥? v) (break v))
-           (define location (gensym (syntax-e id)))
-           (σ-set! location v)
-           (ρ-set ρ* id location)))
-       (aeval #'body ρ*))]
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
+                 "duplicate identifier"
+     (define ρ′
+       (for/fold ([ρ′ ρ])
+                 ([x (in-syntax #'(id ...))]
+                  [e (in-syntax #'(val-expr ...))])
+         (define v (aeval e ρ))
+         (define α (gensym (syntax-e x)))
+         (σ-set! α v)
+         (ρ-set ρ′ x α)))
+     (aeval #'body ρ′)]
   
     [(letrec-values ~! ([(id) val-expr] ...) body)
-     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...))) "duplicate identifier"
-     (let/ec break
-       (define ρ′
-         (for/fold ([ρ′ ρ])
-                   ([x (in-syntax #'(id ...))])
-           (define α (gensym (syntax-e x)))
-           (σ-set! α (⊥ (format "~a: undefined; cannot use before initialization" (syntax-e x))))
-           (ρ-set ρ′ x α)))
-       (define val-list
-         (for/list ([x (in-syntax #'(id ...))]
-                    [e (in-syntax #'(val-expr ...))])
-           (define d (aeval e ρ′))
-           (when (⊥? d) (break ⊥))
-           d))
-       (for ([x (in-syntax #'(id ...))]
-             [v (in-list val-list)])
-         (σ-set! (ρ-ref ρ′ x) v))
-       (aeval #'body ρ′))]
+     #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
+                 "duplicate identifier"
+     (define ρ′
+       (for/fold ([ρ′ ρ])
+                 ([x (in-syntax #'(id ...))])
+         (define α (gensym (syntax-e x)))
+         (ρ-set ρ′ x α)))
+     (define val-list
+       (for/list ([e (in-syntax #'(val-expr ...))])
+         (aeval e ρ′)))
+     (for ([x (in-syntax #'(id ...))]
+           [v (in-list val-list)])
+       (σ-set! (ρ-ref ρ′ x) v))
+     (aeval #'body ρ′)]
   
     [(quote datum)
      #:fail-when (not (in-domain? (syntax->datum #'datum)))
@@ -89,13 +101,11 @@
     [(#%plain-app proc-expr arg-expr ...)
      (define proc (aeval #'proc-expr ρ))
      (define args
-       (for/stream ([arg-expr (in-syntax #'(arg-expr ...))])
-         (aeval arg-expr ρ)))
+       (for/list ([e (in-syntax #'(arg-expr ...))])
+         (aeval e ρ)))
      (cond
-      [(⊥? proc) proc]
-      [(stream-ormap ⊥? args) => identity]
       [(T? proc) T]
-      [else (abstract-apply proc (stream->list args))])]
+      [else (abstract-apply proc args)])]
     
     [(#%expression expr) (aeval #'expr ρ)]
   
@@ -115,12 +125,14 @@
       (for/fold ([ρ′ (closure-environment proc)])
                 ([x (in-syntax #'(id ...))]
                  [v (in-list args)])
-        (define location (gensym (syntax-e x)))
-        (σ-set! location v)
-        (ρ-set ρ′ x location)))
+        (define α (gensym (syntax-e x)))
+        (σ-set! α v)
+        (ρ-set ρ′ x α)))
     (abstract-eval-kernel-syntax #'body ρ′)]
-   [(procedure? proc) (apply proc args)]
-   [else (⊥ "not a procedure")]))
+   [(procedure? proc)
+    (apply proc args)]
+   [else
+    (raise-user-error "not a procedure")]))
 
 #|
   [(closure? proc)

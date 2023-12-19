@@ -16,9 +16,7 @@
          "store.rkt")
 
 (define T 'T)
-; HACK: The definition below works the same when called like `(⊥ message)` or when
-; used directly like `⊥`. Temporary stub while error messages are not implemented.
-(define (⊥ _) ⊥)
+(define ⊥ '⊥)
 (define ℕ 'ℕ)
 
 (define (T? v) (equal? v T))
