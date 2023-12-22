@@ -7,5 +7,4 @@
 
 ## Nice-to-haves
 
-- Error messages (⊥ family)
 - Implement fixed-point iteration more efficiently

@@ -18,7 +18,16 @@
 (define (T? v) (eq? v T))
 (define (ℕ? v) (eq? v ℕ))
 
-(struct ⊥ (message) #:transparent)
+(struct ⊥ (message)
+  #:constructor-name make-⊥
+  #:transparent
+  #:omit-define-syntaxes)
+
+(define/match (⊥ arg . rest-args)
+  [((? string? message-str) '())
+   (make-⊥ message-str)]
+  [((? symbol? who-sym) (list* (? string? format-str) rest-args))
+   (make-⊥ (format "~a: ~a" who-sym (apply format format-str rest-args)))])
 
 ;; TODO: Add false
 ;; TODO: Generic procedures/arrows
@@ -78,15 +87,14 @@
 (define (lub/recur d d′ recur-proc)
   (cond
    [(eqv? d d′) d]
-   [(or (T? d) (T? d′)) T]
+   [(or  (T? d) (T? d′)) T]
+   [(and (⊥? d) (⊥? d′))
+    (⊥ "something went wrong")]
    [(⊥? d ) d′]
    [(⊥? d′) d ]
    [(and (<=? d ℕ) (<=? d′ ℕ)) ℕ]
-   [(and (closure? d) (closure? d′))
-    (if (eq? (closure-label d) (closure-label d′))
-        (make-closure (closure-source-syntax d)
-                      (closure-environment-lub/recur d d′ recur-proc))
-        T)]
+   [(and (closure? d) (closure? d′) (eq? (closure-label d) (closure-label d′)))
+    (make-closure (closure-source-syntax d) (closure-environment-lub/recur d d′ recur-proc))]
    [else T]))
 
 (define (closure-environment-lub/recur c c′ recur-proc)
@@ -95,6 +103,6 @@
     (for/fold ([ρ″ (make-ρ)])
               ([id (in-list (free-vars (closure-source-syntax c)))])
       (define d  (force (ρ-ref ρ  id)))
-      (define d′ (force (ρ-ref ρ′ id (lambda () ⊥))))
+      (define d′ (force (ρ-ref ρ′ id (⊥ "unbound identifier"))))
       (define d″ (recur-proc d d′))
       (ρ-set ρ″ id d″)))
