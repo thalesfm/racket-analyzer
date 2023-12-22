@@ -1,7 +1,9 @@
 #lang racket
 
 (require rackunit
-         "domain.rkt")
+         (rename-in "domain.rkt" [⊥ make-⊥]))
+
+(define ⊥ (make-⊥ "something went wrong"))
 
 ;;; Test cases for `<=?`
 

@@ -53,16 +53,30 @@
      ((Y f) 5)))
  120)
 
-;; FIXME
+;; FIXME: Primitives don't handle abstract values properly
+(check-equal?  (abstract-eval '(if (= (read) 2) 3 4)) ℕ)
+
 (check-equal?
- (abstract-eval
-  '(let* ([Y (lambda (f)
-               (let ([z (lambda (z)
-                          (lambda (x) (f (z z) x)))])
-                 (z z)))]
-          [f (lambda (f n)
-               (if (= n 0)
-                   1
-                   (* n (f (- n 1)))))])
-     ((Y f) (read))))
- 120)
+  (abstract-eval
+   '(let ()
+      (define (times m)
+        (letrec ([recur (λ (n)
+                           (if (= n 0)
+                               0
+                               (+ m (recur (- n 1)))))])
+          recur))
+      ((times 3) 4)))
+ 12)
+
+(check-equal?
+  (abstract-eval
+   '(let ()
+      (define (times m)
+        (letrec ([recur (λ (n)
+                           (if (= n 0)
+                               0
+                               (+ m (recur (- n 1)))))])
+          recur))
+      (let ([f (if (read) (times 3) (times 3))])
+        (f 4))))
+ 12)

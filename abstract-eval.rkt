@@ -43,13 +43,15 @@
     #:literal-sets (kernel-literals)
 
     [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical))) ; locally bound identifier
-     (σ-ref (ρ-ref ρ #'id (λ () (raise-undefined-error #'id)))
-            (λ () (raise-undefined-error #'id)))]
+     (define v (ρ-ref ρ #'id (lambda () (raise-undefined-error #'id))))
+     (if (and (promise? v) (promise-running? v))
+         (raise-undefined-error #'id)
+         (force v))]
 
     [id ; top-level, module-level, or unbound identifier
      (namespace-variable-value (syntax-e #'id)
                                #t
-                               (λ () (raise-undefined-error #'id)))]
+                               (lambda () (raise-undefined-error #'id)))]
 
     [(#%plain-lambda (_id ...) _body)
      (make-closure this-syntax ρ)]
@@ -67,30 +69,27 @@
     [(let-values ~! ([(id) val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
+     (define val-list
+       (for/list ([expr (in-syntax #'(val-expr ...))])
+         (aeval expr ρ)))
      (define ρ′
-       (for/fold ([ρ′ ρ])
+       (for/fold ([ρ ρ])
                  ([x (in-syntax #'(id ...))]
-                  [e (in-syntax #'(val-expr ...))])
-         (define v (aeval e ρ))
-         (define α (gensym (syntax-e x)))
-         (σ-set! α v)
-         (ρ-set ρ′ x α)))
+                  [v (in-list val-list)])
+         (ρ-set ρ x v)))
      (aeval #'body ρ′)]
   
     [(letrec-values ~! ([(id) val-expr] ...) body)
      #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
                  "duplicate identifier"
-     (define ρ′
-       (for/fold ([ρ′ ρ])
-                 ([x (in-syntax #'(id ...))])
-         (define α (gensym (syntax-e x)))
-         (ρ-set ρ′ x α)))
      (define val-list
-       (for/list ([e (in-syntax #'(val-expr ...))])
-         (aeval e ρ′)))
-     (for ([x (in-syntax #'(id ...))]
-           [v (in-list val-list)])
-       (σ-set! (ρ-ref ρ′ x) v))
+       (for/list ([expr (in-syntax #'(val-expr ...))])
+         (delay (aeval expr ρ′))))
+     (define ρ′
+       (for/fold ([ρ ρ])
+                 ([x (in-syntax #'(id ...))]
+                  [v (in-list val-list)])
+         (ρ-set ρ x v)))
      (aeval #'body ρ′)]
   
     [(quote datum)
@@ -100,12 +99,12 @@
   
     [(#%plain-app proc-expr arg-expr ...)
      (define proc (aeval #'proc-expr ρ))
-     (define args
-       (for/list ([e (in-syntax #'(arg-expr ...))])
-         (aeval e ρ)))
+     (define arg-list
+       (for/list ([expr (in-syntax #'(arg-expr ...))])
+         (aeval expr ρ)))
      (cond
       [(T? proc) T]
-      [else (abstract-apply proc args)])]
+      [else (abstract-apply proc arg-list)])]
     
     [(#%expression expr) (aeval #'expr ρ)]
   
@@ -125,14 +124,12 @@
       (for/fold ([ρ′ (closure-environment proc)])
                 ([x (in-syntax #'(id ...))]
                  [v (in-list args)])
-        (define α (gensym (syntax-e x)))
-        (σ-set! α v)
-        (ρ-set ρ′ x α)))
+        (ρ-set ρ′ x v)))
     (abstract-eval-kernel-syntax #'body ρ′)]
    [(procedure? proc)
     (apply proc args)]
    [else
-    (raise-user-error "not a procedure")]))
+    (raise-user-error (format "application: not a procedure;\n  given: ~a" proc))]))
 
 #|
   [(closure? proc)

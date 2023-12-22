@@ -1,27 +1,24 @@
 #lang racket
 
-(provide T
-         T?
-         ⊥ (rename-out [⊥ B])
-         ⊥? (rename-out [⊥? B?])
-         ℕ (rename-out [ℕ N])
-         ℕ? (rename-out [ℕ? N?])
+(provide T T?
+         ℕ ℕ?
+         ⊥ ⊥?
          in-domain?
          (struct-out closure)
+         closure-label
          <=?
          lub)
 
 (require syntax/free-vars
-         "environment.rkt"
-         "store.rkt")
+         "environment.rkt")
 
-(define T 'T)
-(define ⊥ '⊥)
-(define ℕ 'ℕ)
+(define T (unquoted-printing-string "T"))
+(define ℕ (unquoted-printing-string "ℕ"))
 
-(define (T? v) (equal? v T))
-(define (⊥? v) (equal? v ⊥))
-(define (ℕ? v) (equal? v ℕ))
+(define (T? v) (eq? v T))
+(define (ℕ? v) (eq? v ℕ))
+
+(struct ⊥ (message) #:transparent)
 
 ;; TODO: Add false
 ;; TODO: Generic procedures/arrows
@@ -35,52 +32,69 @@
   (or (T? v) (⊥? v) (ℕ? v) (natural? v) (false? v) (procedure? v) (closure? v)))
 
 (define (<=? d1 d2)
-  (cond
-   [(equal? d1 d2) #t]
-   [(T? d2) #t]
-   [(⊥? d1) #t]
-   [(and (natural? d1) (ℕ? d2)) #t]
-   [(and (closure? d1) (closure? d2)) (closure<=? d1 d2)]
-   [else #f]))
+  (define ht (make-hashalw))
+  (let loop ([d1 d1] [d2 d2])
+    (or (hash-ref ht (cons d1 d2) #f)
+        (begin
+          (hash-set! ht (cons d1 d2) #t)
+          (<=?/recur d1 d2 loop)))))
 
-(define (closure<=? c1 c2)
-  (or (eq? c1 c2)
-      (and (eq? (closure-label c1)
-                (closure-label c2))
-           (closure-environment<=? c1 c2))))
+(define (<=?/recur d1 d2 recur-proc)
+  (let loop ([d1 d1] [d2 d2])
+    (cond
+     [(eqv? d1 d2) #t]
+     [(T? d2) #t]
+     [(⊥? d1) #t]
+     [(and (natural? d1) (ℕ? d2)) #t]
+     [(and (closure? d1) (closure? d2))
+      (and (eq? (closure-label d1) (closure-label d2))
+           (closure-environment<=?/recur d1 d2 recur-proc))]
+     [else #f])))
 
-(define (closure-environment<=? c1 c2)
-  (define env1 (closure-environment c1))
-  (define env2 (closure-environment c2))
+(define (closure-environment<=?/recur c1 c2 recur-proc)
+  (define ρ1 (closure-environment c1))
+  (define ρ2 (closure-environment c2))
   (for/and ([id (in-list (free-vars (closure-source-syntax c1)))])
-    (<=? (ρ-ref env1 id ⊥) (ρ-ref env2 id ⊥))))
+    (let/ec break
+      (define v1 (ρ-ref ρ1 id))
+      (define v2 (ρ-ref ρ2 id (lambda () (break #f))))
+      (<=?/recur (force v1) (force v2) recur-proc))))
 
-(define (lub d1 d2)
+(define (lub d d′)
+  (define ht
+    (make-custom-hash
+      (lambda (p p′)
+        (or (and (eqv? (car p) (car p′))
+                 (eqv? (cdr p) (cdr p′)))
+            (and (eqv? (car p) (cdr p′))
+                 (eqv? (cdr p) (car p′)))))))
+  (let loop ([d d] [d′ d′])
+    (or (dict-ref ht (cons d  d′) #f)
+        (let ()
+          (define d″ (delay (lub/recur d d′ loop)))
+          (dict-set! ht (cons d d′) d″)
+          (force d″)))))
+
+(define (lub/recur d d′ recur-proc)
   (cond
-   [(equal? d1 d2) d1]
-   [(or (T? d1) (T? d2)) T]
-   [(⊥? d1) d2]
-   [(⊥? d2) d1]
-   [(and (<=? d1 ℕ) (<=? d2 ℕ)) ℕ]
-   [(and (closure? d1) (closure? d2)) (closure-lub d1 d2)]
+   [(eqv? d d′) d]
+   [(or (T? d) (T? d′)) T]
+   [(⊥? d ) d′]
+   [(⊥? d′) d ]
+   [(and (<=? d ℕ) (<=? d′ ℕ)) ℕ]
+   [(and (closure? d) (closure? d′))
+    (if (eq? (closure-label d) (closure-label d′))
+        (make-closure (closure-source-syntax d)
+                      (closure-environment-lub/recur d d′ recur-proc))
+        T)]
    [else T]))
 
-;; FIXME: Will enter an infinite loop when both arguments are recursive procedures which are not `eq?`
-;; but have the same label (I think)
-(define (closure-lub c1 c2)
-  (cond
-   [(eq? (closure-label c1) (closure-label c2))
-    (make-closure (closure-source-syntax c1)
-                  (closure-environment-lub c1 c2))]
-   [else T]))
-
-(define (closure-environment-lub c1 c2)
-    (define ρ1 (closure-environment c1))
-    (define ρ2 (closure-environment c2))
-    (for/fold ([ρ- (make-ρ)])
-              ([id (in-list (free-vars (closure-source-syntax c1)))])
-      (define d1 (σ-ref (ρ-ref ρ1 id) (lambda () ⊥)))
-      (define d2 (σ-ref (ρ-ref ρ2 id) (lambda () ⊥)))
-      (define location (gensym (syntax-e id)))
-      (σ-set! location (lub d1 d2))
-      (ρ-set ρ- id location)))
+(define (closure-environment-lub/recur c c′ recur-proc)
+    (define ρ  (closure-environment c ))
+    (define ρ′ (closure-environment c′))
+    (for/fold ([ρ″ (make-ρ)])
+              ([id (in-list (free-vars (closure-source-syntax c)))])
+      (define d  (force (ρ-ref ρ  id)))
+      (define d′ (force (ρ-ref ρ′ id (lambda () ⊥))))
+      (define d″ (recur-proc d d′))
+      (ρ-set ρ″ id d″)))
