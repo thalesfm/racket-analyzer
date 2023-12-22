@@ -22,80 +22,82 @@
 (define-conventions expr-suffix [#rx"(^|-)expr$" expr])
 
 (define (abstract-eval-kernel-syntax stx [ρ (make-ρ)])
-  (let loop ([stx stx] [ρ ρ])
-    (syntax-parse stx
-      #:conventions (id-suffix expr-suffix)
-      #:literal-sets (kernel-literals)
-  
-      [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical))) ; locally bound identifier
-       (define v (ρ-ref ρ #'id (⊥ (syntax-e #'id) "unbound identifier")))
-       (if (and (promise? v) (promise-running? v))
-           (⊥ (syntax-e #'id) "undefined;\n cannot use before initialization")
-           (force v))]
-  
-      [id ; top-level, module-level, or unbound identifier
-       (namespace-variable-value (syntax-e #'id)
-                                 #t
-                                 (lambda () (⊥ (syntax-e #'id) "unbound identifier")))]
-  
-      [(#%plain-lambda (_id ...) _body)
-       (make-closure this-syntax ρ)]
-  
-      [(if ~! test-expr then-expr else-expr)
-       (define v (loop #'test-expr ρ))
-       (cond
-        [(T? v) (lub (loop #'then-expr ρ)
-                     (loop #'else-expr ρ))]
-        [(eq? v #f)  (loop #'else-expr ρ)]
-        [else        (loop #'then-expr ρ)])]
-    
-      [(let-values ~! ([(id) val-expr] ...) body)
-       #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
-                   "duplicate identifier"
-       (define val-list
-         (for/list ([expr (in-syntax #'(val-expr ...))])
-           (loop expr ρ)))
-       (define ρ′
-         (for/fold ([ρ ρ])
-                   ([x (in-syntax #'(id ...))]
-                    [v (in-list val-list)])
-           (ρ-set ρ x v)))
-       (loop #'body ρ′)]
-    
-      [(letrec-values ~! ([(id) val-expr] ...) body)
-       #:fail-when (check-duplicate-identifier (syntax->list #'(id ...)))
-                   "duplicate identifier"
-       (define val-list
-         (for/list ([expr (in-syntax #'(val-expr ...))])
-           (delay (loop expr ρ′))))
-       (define ρ′
-         (for/fold ([ρ ρ])
-                   ([x (in-syntax #'(id ...))]
-                    [v (in-list val-list)])
-           (ρ-set ρ x v)))
-       (loop #'body ρ′)]
-    
-      [(quote datum)
-       #:fail-when (not (in-domain? (syntax->datum #'datum)))
-                   "datum not in domain"
-       (syntax-e #'datum)]
-    
-      [(#%plain-app proc-expr arg-expr ...)
-       (define proc (loop #'proc-expr ρ))
-       (define arg-list
-         (for/list ([expr (in-syntax #'(arg-expr ...))])
-           (loop expr ρ)))
-       (abstract-apply proc arg-list)]
-      
-      [(#%expression expr) (loop #'expr ρ)]
-    
-      ;; Not implemented: module, begin, begin-for-syntax, define-values,
-      ;; define-syntaxes, #%require, case-lambda, begin, begin0, set!, quote-syntax,
-      ;; with-continuation-mark, #%variable-reference, #%top
-  
-      [_
-       #:fail-when #t "not implemented"
-       (assert-unreachable)])))
+  (let aeval ([stx stx] [ρ ρ])
+    (let/ec break
+      (define (aeval/strict stx ρ)
+        (define d (aeval stx ρ))
+        (if (⊥? d) (break d) d))
+      (syntax-parse stx
+        #:conventions (id-suffix expr-suffix)
+        #:literal-sets (kernel-literals)
+
+        [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical))) ; locally bound identifier
+         (define v (ρ-ref ρ #'id (⊥ (syntax-e #'id) "unbound identifier")))
+         (if (and (promise? v) (not (promise-forced? v)))
+             (⊥ (syntax-e #'id) "undefined;\n cannot use before initialization")
+             (force v))]
+
+        [id ; top-level, module-level, or unbound identifier
+         (namespace-variable-value (syntax-e #'id)
+                                   #t
+                                   (lambda () (⊥ (syntax-e #'id) "unbound identifier")))]
+
+        [(#%plain-lambda (_id ...) _body)
+         (make-closure this-syntax ρ)]
+
+        [(if ~! test-expr then-expr else-expr)
+         (define v (aeval/strict #'test-expr ρ))
+         (cond
+          [(T? v) (lub (aeval #'then-expr ρ)
+                       (aeval #'else-expr ρ))]
+          [(eq? v #f)  (aeval #'else-expr ρ)]
+          [else        (aeval #'then-expr ρ)])]
+
+        [(let-values ~! ([(id) val-expr] ...) body)
+         (define vv
+           (for/vector ([expr (in-syntax #'(val-expr ...))])
+             (aeval/strict expr ρ)))
+         (define ρ′
+           (for/fold ([ρ ρ])
+                     ([x (in-syntax #'(id ...))]
+                      [v (in-vector vv)])
+             (ρ-set ρ x v)))
+         (aeval #'body ρ′)]
+
+        [(letrec-values ~! ([(id) val-expr] ...) body)
+         (define vv
+           (for/vector ([expr (in-syntax #'(val-expr ...))])
+             (delay (aeval/strict expr ρ′))))
+         (define ρ′
+           (for/fold ([ρ ρ])
+                     ([x (in-syntax #'(id ...))]
+                      [v (in-vector vv)])
+             (ρ-set ρ x v)))
+         (for ([v (in-vector vv)])
+           (force v))
+         (aeval #'body ρ′)]
+
+        [(quote datum)
+         #:fail-when (not (in-domain? (syntax->datum #'datum)))
+                     "datum not in domain"
+         (syntax-e #'datum)]
+
+        [(#%plain-app proc-expr arg-expr ...)
+         (define proc (aeval/strict #'proc-expr ρ))
+         (define arg-list
+           (for/list ([expr (in-syntax #'(arg-expr ...))])
+             (aeval/strict expr ρ)))
+         (abstract-apply proc arg-list)]
+
+        [(#%expression expr) (aeval #'expr ρ)]
+
+        ;; Not implemented: module, begin, begin-for-syntax, define-values,
+        ;; define-syntaxes, #%require, case-lambda, begin, begin0, set!, quote-syntax,
+        ;; with-continuation-mark, #%variable-reference, #%top
+
+        [_
+         #:fail-when #t "not implemented"
+         (assert-unreachable)]))))
 
 (define (abstract-apply proc arg-list)
   (cond

@@ -14,5 +14,5 @@
   ; (set-constant-value! '/ ...)
   ; (set-constant-value! '= ...)
   (set-constant-value! 'read (lambda () T))
-  (set-constant-value! 'error (lambda () ⊥))
+  (set-constant-value! 'error (lambda () (⊥ "error")))
   nsp)
