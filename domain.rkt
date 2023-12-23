@@ -9,8 +9,8 @@
          <=?
          lub)
 
-(require syntax/free-vars
-         "environment.rkt")
+(require "environment.rkt"
+         "free-vars.rkt")
 
 (define T (unquoted-printing-string "T"))
 (define ℕ (unquoted-printing-string "ℕ"))

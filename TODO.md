@@ -7,4 +7,5 @@
 
 ## Nice-to-haves
 
+- Organize tests better
 - Implement fixed-point iteration more efficiently
