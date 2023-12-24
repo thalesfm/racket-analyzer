@@ -1,5 +1,7 @@
 #lang racket
 
+;; TODO: Primitives don't handle abstract values properly
+
 (provide make-primitive-namespace)
 
 (require "domain.rkt")

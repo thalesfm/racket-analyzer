@@ -1,11 +1,12 @@
 #lang racket
 
 (require rackunit
-         (rename-in "domain.rkt" [⊥ make-⊥]))
+         (rename-in "../domain.rkt" [⊥ make-⊥]))
 
 (define ⊥ (make-⊥ "something went wrong"))
 
-;;; Test cases for `<=?`
+;; ----------------------------------------------------------------------------
+;; Checks for `<=?`
 
 (check-true (<=? T T))
 (check-true (<=? ℕ T)) (check-false (<=? T ℕ))
@@ -26,7 +27,8 @@
 (check-true  (<=? + +))
 (check-false (<=? + /))
 
-;;; Test cases for `lub`
+;; ----------------------------------------------------------------------------
+;; Checks for `lub`
 
 (check-equal? (lub T T) T)
 (check-equal? (lub ℕ T) T)
