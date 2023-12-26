@@ -1,5 +1,8 @@
 #lang racket
 
+;; TODO: Add false value
+;; TODO: Abstract procedure values (w/ arity?)
+
 (provide T T?
          ℕ ℕ?
          ⊥ ⊥?
@@ -28,9 +31,6 @@
    (make-⊥ message-str)]
   [((? symbol? who-sym) (list* (? string? format-str) rest-args))
    (make-⊥ (format "~a: ~a" who-sym (apply format format-str rest-args)))])
-
-;; TODO: Add false
-;; TODO: Generic procedures/arrows
 
 (struct closure (source-syntax environment)
   #:constructor-name make-closure)

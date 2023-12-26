@@ -12,10 +12,10 @@
 ;; -----------------------------------------------------------------------------
 ;; Checks for primitive procedures
 
-(test-begin
-  (check-equal? + (abstract-eval '+))
-  (check-equal? 7 (abstract-eval '(+ 3 4)))
-  (check-equal? ℕ (abstract-eval '(+ (read) 4)))) ; FIXME: failing
+(check-pred procedure? (abstract-eval '+))
+(check-equal? (abstract-eval '(+ 3 4)) 7)
+(check-equal? (abstract-eval '(+ (read) 4)) T)
+(check-pred ⊥? (abstract-eval '(+ 1 2 3)))
 
 ;; -----------------------------------------------------------------------------
 ;; Checks for `let` expressions

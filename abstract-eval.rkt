@@ -8,18 +8,15 @@
          "environment.rkt"
          "primitives.rkt")
 
-(define (abstract-eval top-level-form [namespace (make-primitive-namespace)])
+(define (abstract-eval top-level-form [namespace primitives-namespace])
   (parameterize ([current-namespace namespace])
     (abstract-eval-syntax
      (namespace-syntax-introduce
       (datum->syntax #f top-level-form)))))
 
-(define (abstract-eval-syntax top-level-form [namespace (make-primitive-namespace)])
+(define (abstract-eval-syntax top-level-form [namespace primitives-namespace])
   (parameterize ([current-namespace namespace])
     (abstract-eval-kernel-syntax (expand top-level-form))))
-
-(define-conventions id-suffix [#rx"(^|-)id$" id])
-(define-conventions expr-suffix [#rx"(^|-)expr$" expr])
 
 (define (abstract-eval-kernel-syntax stx [ρ (make-ρ)])
   (let aeval ([stx stx] [ρ ρ])
@@ -28,21 +25,20 @@
         (define d (aeval stx ρ))
         (if (⊥? d) (break d) d))
       (syntax-parse stx
-        #:conventions (id-suffix expr-suffix)
         #:literal-sets (kernel-literals)
 
-        [(~and id (~fail #:unless (eq? (identifier-binding #'id) 'lexical))) ; locally bound identifier
+        [(~and id:id (~fail #:unless (eq? (identifier-binding #'id) 'lexical))) ; locally bound identifier
          (define v (ρ-ref ρ #'id (⊥ (syntax-e #'id) "unbound identifier")))
          (if (and (promise? v) (not (promise-forced? v)))
              (⊥ (syntax-e #'id) "undefined;\n cannot use before initialization")
              (force v))]
 
-        [id ; top-level, module-level, or unbound identifier
+        [id:id ; top-level, module-level, or unbound identifier
          (namespace-variable-value (syntax-e #'id)
                                    #t
                                    (lambda () (⊥ (syntax-e #'id) "unbound identifier")))]
 
-        [(#%plain-lambda (_id ...) _body)
+        [(#%plain-lambda (_id:id ...) _body)
          (make-closure this-syntax ρ)]
 
         [(if ~! test-expr then-expr else-expr)
@@ -53,7 +49,7 @@
           [(eq? v #f)  (aeval #'else-expr ρ)]
           [else        (aeval #'then-expr ρ)])]
 
-        [(let-values ~! ([(id) val-expr] ...) body)
+        [(let-values ~! ([(id:id) val-expr] ...) body)
          (define vv
            (for/vector ([expr (in-syntax #'(val-expr ...))])
              (aeval/strict expr ρ)))
@@ -64,7 +60,7 @@
              (ρ-set ρ x v)))
          (aeval #'body ρ′)]
 
-        [(letrec-values ~! ([(id) val-expr] ...) body)
+        [(letrec-values ~! ([(id:id) val-expr] ...) body)
          (define vv
            (for/vector ([expr (in-syntax #'(val-expr ...))])
              (delay (aeval/strict expr ρ′))))

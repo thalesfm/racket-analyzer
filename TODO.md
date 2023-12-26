@@ -1,5 +1,4 @@
 - Abstract procedure values
-- Properly lifted primitive procedures
 - Backjumping for recursive procedures
 - Fixed-point iteration for recursive procedures
 - More efficient fixed-point iteration
