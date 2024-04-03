@@ -95,19 +95,26 @@
          #:fail-when #t "not implemented"
          (assert-unreachable)]))))
 
-(define (abstract-apply proc arg-list)
+(define (abstract-apply proc args)
   (cond
    [(T? proc) T]
    [(closure? proc)
+    (printf "(~a ~a)" proc args)
     (define/syntax-parse (_ (id ...) body) (closure-source-syntax proc))
+    (define args′ (continuation-mark-set-first #f proc))
+    (define args″ (if args′ (map lub args args′) args))
+    (when args′
+      (printf " <= (~a ~a)" proc args″))
+    (printf "\n")
     (define ρ′
       (for/fold ([ρ (closure-environment proc)])
                 ([x (in-syntax #'(id ...))]
-                 [v (in-list arg-list)])
+                 [v (in-list args″)])
         (ρ-set ρ x v)))
-    (abstract-eval-kernel-syntax #'body ρ′)]
+    (with-continuation-mark proc args″
+      (abstract-eval-kernel-syntax #'body ρ′))]
    [(procedure? proc)
-    (apply proc arg-list)]
+    (apply proc args)]
    [else (⊥ 'application "not a procedure;\n  given: ~a" proc)]))
 
 #|
