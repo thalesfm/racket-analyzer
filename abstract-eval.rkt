@@ -50,12 +50,11 @@
 
         [o:primop (attribute o.proc)]
 
-        ;; TODO: Remove eval/strict, procedures should handle bottom
         [(#%plain-app expr0 expr1 ...)
          (define proc (eval^/strict #'expr0 ρ))
          (define args
            (for/list ([expr1 (in-syntax #'(expr1 ...))])
-             (eval^/strict expr1 ρ)))
+             (eval^ expr1 ρ)))
          (cond
            [(or (procedure? proc) (closure? proc)) (abstract-apply proc args)]
            [else ⊥])]
@@ -94,6 +93,7 @@
 ;; TODO: Fix infinite loop
 (define (abstract-apply proc args)
   (cond
+   [(ormap ⊥? args) ⊥]
    [(closure? proc)
     (define/syntax-parse (_ (x ...) expr) (closure-source-syntax proc))
     (define args′ (continuation-mark-set-first #f proc))

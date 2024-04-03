@@ -17,6 +17,7 @@
   (cond
    [(not (procedure-arity-includes? proc (length args))) ⊥]
    [(andmap natural? args) (apply proc args)]
+   [(ormap ⊥? args) ⊥]
    [else T]))
 
 (define-primitive/lift read

@@ -2,7 +2,6 @@
 
 (provide T T?
          ⊥ ⊥?
-         in-domain?
          (struct-out closure)
          closure-label
          <=?
@@ -22,14 +21,6 @@
   #:constructor-name make-closure)
 
 (define closure-label closure-source-syntax)
-
-(define (in-domain? v)
-  (or (T? v)
-      (⊥? v)
-      (natural? v)
-      (boolean? v)
-      (procedure? v)
-      (closure? v)))
 
 (define (<=? d1 d2)
   (define ht (make-hashalw))
