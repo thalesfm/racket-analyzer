@@ -30,26 +30,19 @@
 (check-equal? 3  (abstract-eval '(letrec ([x 3]) x)))
 (check-equal? 7  (abstract-eval '(letrec ([x 3] [y 4]) (+ x y))))
 (check-equal? 6  (abstract-eval '(letrec ([x 5]) (letrec ([x 6]) x))))
-;; Removed for simplified implementation
-;; (check-pred   ⊥? (abstract-eval '(letrec ([x x]) x)))
+(check-pred   ⊥? (abstract-eval '(letrec ([x x]) x)))
 (check-equal? 5  (abstract-eval '(letrec ([x 5] [y x]) y)))
-;; Removed for simplified implementation
-;; (check-pred   ⊥? (abstract-eval '(letrec ([x y] [y 5]) x)))
+(check-pred   ⊥? (abstract-eval '(letrec ([x y] [y 5]) x)))
 (check-equal? 5  (abstract-eval '(letrec ([x (lambda () y)] [y 5]) (x))))
 
 ;; -----------------------------------------------------------------------------
 ;; Checks for conditional expressions
 
-;; Removed for simplified implementation
-;; (check-equal? 3 (abstract-eval '(if  2 3 4)))
-;; Removed for simplified implementation
-;; (check-equal? 3 (abstract-eval '(if  0 3 4)))
+(check-equal? 3 (abstract-eval '(if #t 3 4)))
 (check-equal? 4 (abstract-eval '(if #f 3 4)))
-;; Removed for simplified implementation
-;; (check-equal? ℕ (abstract-eval '(if (read) 3 4)))
+(check-equal? T (abstract-eval '(if (read) 3 4)))
 
 (check-pred   ⊥? (abstract-eval '(if (error) 3 4)))
-;; Re-written for simplified implementation
 (check-equal? 3  (abstract-eval '(if #t 3 (error))))
 (check-equal? 4  (abstract-eval '(if #f (error) 4)))
 (check-equal? 3  (abstract-eval '(if (read) 3 (error))))
@@ -71,7 +64,6 @@
           [f (if (read) (c 3) (c 3))])
      (f 7))))
 
-;; Adapted for simplified implementation
 (check-equal? T
  (abstract-eval
   '(let* ([c (lambda (k) (lambda (x) k))]

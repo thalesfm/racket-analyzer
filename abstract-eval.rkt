@@ -18,6 +18,8 @@
   (parameterize ([current-namespace namespace])
     (abstract-eval-kernel-syntax (expand top-level-form))))
 
+;; TODO: Convert kernel syntax to the language used in the equations?
+
 ;; TODO: Rename to `abstract-eval` if possible
 (define (abstract-eval-kernel-syntax expr [ρ (make-ρ)])
   (let eval ([expr expr] [ρ ρ])
@@ -29,7 +31,10 @@
         #:literal-sets (kernel-literals)
 
         [(~and x:id (~fail #:unless (eq? (identifier-binding #'x) 'lexical)))
-         (force (ρ-ref ρ #'x))]
+         (define d (ρ-ref ρ #'x))
+         (cond
+          [(and (promise? d) (not (promise-forced? d))) ⊥]
+          [else (force d)])]
 
         [(quote k) (syntax-e #'k)]
 
@@ -51,8 +56,7 @@
          (cond
           [(eq? d #t) (eval #'expr1 ρ)]
           [(eq? d #f) (eval #'expr2 ρ)]
-          [(eq? d  T) (lub (eval #'expr1 ρ)
-                           (eval #'expr2 ρ))]
+          [(eq? d  T) (lub (eval #'expr1 ρ) (eval #'expr2 ρ))]
           [(eq? d  ⊥) ⊥])]
 
         [(let-values ~! ([(x:id) expr0] ...) expr1)
@@ -60,6 +64,7 @@
 
         ;; TODO: Make more similar to equation (single clause?)
         [(letrec-values ~! ([(x:id) expr0] ...) expr1)
+         ;; d = (eval #'expr0 (ρ-set ρ x d))
          (define ρ′
            (for/fold ([ρ ρ])
                      ([x (in-syntax #'(x ...))]
