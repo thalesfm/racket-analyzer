@@ -20,6 +20,16 @@
 
 ;; TODO: Convert kernel syntax to the language used in the equations?
 
+(define-syntax-class var
+  (pattern (~and id:id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))))
+
+(define-syntax-class const
+  #:literals (quote)
+  (pattern (quote datum) #:attr value (syntax-e #'datum)))
+
+(define-syntax-class primop
+  (pattern id:id #:attr proc (namespace-variable-value (syntax-e #'id) #t)))
+
 ;; TODO: Rename to `abstract-eval` if possible
 (define (abstract-eval-kernel-syntax expr [ρ (make-environment)])
   (let eval ([expr expr] [ρ ρ])
@@ -30,15 +40,16 @@
       (syntax-parse expr
         #:literal-sets (kernel-literals)
 
-        [(~and x:id (~fail #:unless (eq? (identifier-binding #'x) 'lexical)))
+        ;; TODO: If possible, remove promise-related stuff
+        [x:var
          (define d (environment-ref ρ #'x))
          (cond
           [(and (promise? d) (not (promise-forced? d))) ⊥]
           [else (force d)])]
 
-        [(quote k) (syntax-e #'k)]
+        [k:const (attribute k.value)]
 
-        [o:id (namespace-variable-value (syntax-e #'o) #t)]
+        [o:primop (attribute o.proc)]
 
         [(#%plain-app expr0 expr1 ...)
          (define fun (eval/strict #'expr0 ρ))
