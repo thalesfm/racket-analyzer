@@ -11,8 +11,8 @@
 (require "environment.rkt"
          "free-vars.rkt")
 
-(define T (unquoted-printing-string "T"))
-(define ⊥ (unquoted-printing-string "⊥"))
+(define (T . _) T)
+(define (⊥ . _) ⊥)
 
 (define (T? v) (eq? v T))
 (define (⊥? v) (eq? v ⊥))

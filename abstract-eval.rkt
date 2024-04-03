@@ -32,16 +32,15 @@
 
 ;; TODO: Rename to `abstract-eval` if possible
 (define (abstract-eval-kernel-syntax expr [ρ (make-environment)])
-  (let eval ([expr expr] [ρ ρ])
+  (let eval^ ([expr expr] [ρ ρ])
     (let/ec break
-      (define (eval/strict expr ρ)
-        (define d (eval expr ρ))
+      (define (eval^/strict expr ρ)
+        (define d (eval^ expr ρ))
         (if (⊥? d) (break d) d))
       (syntax-parse expr
         #:literal-sets (kernel-literals)
 
-        ;; TODO: If possible, remove promise-related stuff
-        [x:var
+        [x:var ;; TODO: If possible, remove promise-related stuff
          (define d (environment-ref ρ #'x))
          (cond
           [(and (promise? d) (not (promise-forced? d))) ⊥]
@@ -51,27 +50,31 @@
 
         [o:primop (attribute o.proc)]
 
+        ;; TODO: Remove eval/strict, procedures should handle bottom
         [(#%plain-app expr0 expr1 ...)
-         (define fun (eval/strict #'expr0 ρ))
-         (define arg-list
+         (define proc (eval^/strict #'expr0 ρ))
+         (define args
            (for/list ([expr1 (in-syntax #'(expr1 ...))])
-             (eval/strict expr1 ρ)))
-         ;; TODO: Check if fun is in fact a procedure
-         (abstract-apply fun arg-list)]
+             (eval^/strict expr1 ρ)))
+         (cond
+           [(or (procedure? proc) (closure? proc)) (abstract-apply proc args)]
+           [else ⊥])]
 
+        ;; TODO: Should produce a procedure
         [(#%plain-lambda (x:id ...) expr)
          (make-closure this-syntax ρ)]
 
-        [(if ~! expr0 expr1 expr2)
-         (define d (eval #'expr0 ρ))
+        ;; TODO: Remove cut?
+        [(if ~! e0 e1 e2)
+         (define d (eval^ #'e0 ρ))
          (cond
-          [(eq? d #t) (eval #'expr1 ρ)]
-          [(eq? d #f) (eval #'expr2 ρ)]
-          [(eq? d  T) (lub (eval #'expr1 ρ) (eval #'expr2 ρ))]
+          [(eq? d #t) (eval^ #'e1 ρ)]
+          [(eq? d #f) (eval^ #'e2 ρ)]
+          [(eq? d  T) (lub (eval^ #'e1 ρ) (eval^ #'e2 ρ))]
           [(eq? d  ⊥) ⊥])]
 
-        [(let-values ~! ([(x:id) expr0] ...) expr1)
-         (eval #'(#%plain-app (#%plain-lambda (x ...) expr1) expr0 ...) ρ)]
+        [(let-values ~! ([(x:id) e0] ...) e1)
+         (eval^ #'(#%plain-app (#%plain-lambda (x ...) e1) e0 ...) ρ)]
 
         ;; TODO: Make more similar to equation (single clause?)
         [(letrec-values ~! ([(x:id) expr0] ...) expr1)
@@ -80,18 +83,17 @@
            (for/fold ([ρ ρ])
                      ([x (in-syntax #'(x ...))]
                       [expr0 (in-syntax #'(expr0 ...))])
-             (define d (delay (eval/strict expr0 ρ′)))
+             (define d (delay (eval^/strict expr0 ρ′)))
              (environment-set ρ x d)))
          (for ([x (in-syntax #'(x ...))])
            (define d (environment-ref ρ′ x))
            (force d))
-         (eval #'expr1 ρ′)]))))
+         (eval^ #'expr1 ρ′)]))))
 
 ;; TODO: Make more similiar to equations
 ;; TODO: Fix infinite loop
 (define (abstract-apply proc args)
   (cond
-   [(T? proc) T] ;; Remove if possible (define T as a proc)
    [(closure? proc)
     (define/syntax-parse (_ (x ...) expr) (closure-source-syntax proc))
     (define args′ (continuation-mark-set-first #f proc))
