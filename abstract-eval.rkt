@@ -47,12 +47,13 @@
          (make-closure this-syntax ρ)]
 
         [(if ~! expr0 expr1 expr2)
-         (define d (eval/strict #'expr0 ρ))
+         (define d (eval #'expr0 ρ))
          (cond
           [(eq? d #t) (eval #'expr1 ρ)]
           [(eq? d #f) (eval #'expr2 ρ)]
           [(eq? d  T) (lub (eval #'expr1 ρ)
-                           (eval #'expr2 ρ))])]
+                           (eval #'expr2 ρ))]
+          [(eq? d  ⊥) ⊥])]
 
         [(let-values ~! ([(x:id) expr0] ...) expr1)
          (eval #'(#%plain-app (#%plain-lambda (x ...) expr1) expr0 ...) ρ)]
@@ -88,4 +89,4 @@
       (abstract-eval-kernel-syntax #'expr ρ′))]
    [(procedure? proc)
     (apply proc args)]
-   [else (⊥ 'application "not a procedure;\n  given: ~a" proc)]))
+   [else ⊥]))

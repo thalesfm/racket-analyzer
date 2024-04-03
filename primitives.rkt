@@ -15,14 +15,14 @@
 
 (define ((lift proc) . args)
   (cond
-   [(not (procedure-arity-includes? proc (length args))) (⊥ "arity mismatch")]
+   [(not (procedure-arity-includes? proc (length args))) ⊥]
    [(andmap natural? args) (apply proc args)]
    [else T]))
 
 (define-primitive/lift read
   (lambda () T))
 (define-primitive/lift error
-  (lambda () (⊥ "error")))
+  (lambda () ⊥))
 (define-primitive/lift + (procedure-reduce-arity + 2))
 (define-primitive/lift - (procedure-reduce-arity - 2))
 (define-primitive/lift * (procedure-reduce-arity * 2))
