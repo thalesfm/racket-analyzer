@@ -2,7 +2,7 @@
 
 (require rackunit
          "../abstract-eval.rkt"
-         "../domain.rkt")
+         "../abstract-value.rkt")
 
 ;; -----------------------------------------------------------------------------
 ;; Checks for datum literals

@@ -3,7 +3,7 @@
 (provide primitives-namespace)
 
 (require syntax/parse/define
-         "domain.rkt")
+         "abstract-value.rkt")
 
 (define primitives-namespace (make-base-namespace))
 

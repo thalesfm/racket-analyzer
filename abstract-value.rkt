@@ -7,7 +7,8 @@
          <=?
          lub)
 
-(require "environment.rkt"
+(require (prefix-in base: "abstract-value-base.rkt")
+         "environment.rkt"
          "free-vars.rkt")
 
 (define (T . _) T)
@@ -16,29 +17,45 @@
 (define (T? v) (eq? v T))
 (define (⊥? v) (eq? v ⊥))
 
+(define (lift d)
+  (cond
+   [(eq? d base:T) T]
+   [(eq? d base:⊥) ⊥]
+   [else d]))
+
+(define (proj d [default #f])
+  (cond
+   [(eq? d T) base:T]
+   [(eq? d ⊥) base:⊥]
+   [(base:abstract-value? d) d]
+   [else default]))
 
 (struct closure (source-syntax environment)
   #:constructor-name make-closure)
 
 (define closure-label closure-source-syntax)
 
-(define (<=? d1 d2)
+(define (<=? d d′)
   (define ht (make-hashalw))
-  (let loop ([d1 d1] [d2 d2])
-    (or (hash-ref ht (cons d1 d2) #f)
+  (let loop ([d d] [d′ d′])
+    (or (hash-ref ht (cons d d′) #f)
         (begin
-          (hash-set! ht (cons d1 d2) #t)
-          (<=?/recur d1 d2 loop)))))
+          (hash-set! ht (cons d d′) #t)
+          (<=?/recur d d′ loop)))))
 
-(define (<=?/recur d1 d2 recur-proc)
+(define (<=?/recur d d′ recur-proc)
   (cond
-   [(eqv? d1 d2) #t]
-   [(T? d2) #t]
-   [(⊥? d1) #t]
-   [(and (closure? d1) (closure? d2))
-    (and (eq? (closure-label d1) (closure-label d2))
-         (closure-environment<=?/recur d1 d2 recur-proc))]
-   [else #f]))
+   [(eqv? d  d′) #t]
+   [(eq?  d  ⊥ ) #t]
+   [(eq?  d′ T ) #t]
+   [(and (base:abstract-value? (proj d  T))
+         (base:abstract-value? (proj d′ T)))
+    (base:<=? (proj d) (proj d′))]
+   [else
+    (and (closure? d )
+         (closure? d′))
+         (eq? (closure-label d) (closure-label d′))
+         (closure-environment<=?/recur d d′ recur-proc)]))
 
 (define (closure-environment<=?/recur c1 c2 recur-proc)
   (define ρ1 (closure-environment c1))
@@ -66,12 +83,17 @@
 
 (define (lub/recur d d′ recur-proc)
   (cond
-   [(eqv? d d′) d]
-   [(or  (T? d) (T? d′)) T]
-   [(and (⊥? d) (⊥? d′)) ⊥]
-   [(⊥? d ) d′]
-   [(⊥? d′) d ]
-   [(and (closure? d) (closure? d′) (eq? (closure-label d) (closure-label d′)))
+   [(eqv? d  d′) d ]
+   [(eq?  d  ⊥ ) d′]
+   [(eq?  d′ ⊥ ) d ]
+   [(eq?  d  T ) T ]
+   [(eq?  d′ T ) T ]
+   [(and (base:abstract-value? (proj d  T))
+         (base:abstract-value? (proj d′ T)))
+    (lift (base:lub (proj d) (proj d′)))]
+   [(and (closure? d )
+         (closure? d′)
+         (eq? (closure-label d) (closure-label d′)))
     (make-closure (closure-source-syntax d) (closure-environment-lub/recur d d′ recur-proc))]
    [else T]))
 

@@ -4,7 +4,7 @@
          abstract-eval-syntax)
 
 (require syntax/parse
-         "domain.rkt"
+         "abstract-value.rkt"
          "environment.rkt"
          "primitives.rkt")
 
@@ -36,7 +36,7 @@
     (let/ec break
       (define (eval^/strict expr ρ)
         (define d (eval^ expr ρ))
-        (if (⊥? d) (break d) d))
+        (if (eq? d ⊥) (break d) d))
       (syntax-parse expr
         #:literal-sets (kernel-literals)
 
@@ -50,44 +50,44 @@
 
         [o:primop (attribute o.proc)]
 
-        [(#%plain-app expr0 expr1 ...)
+        [(#%plain-app expr0 expr ...)
          (define proc (eval^/strict #'expr0 ρ))
          (define args
-           (for/list ([expr1 (in-syntax #'(expr1 ...))])
-             (eval^ expr1 ρ)))
+           (for/list ([expr (in-syntax #'(expr ...))])
+             (eval^ expr ρ)))
          (cond
            [(or (procedure? proc) (closure? proc)) (abstract-apply proc args)]
            [else ⊥])]
 
         ;; TODO: Should produce a procedure
-        [(#%plain-lambda (x:id ...) expr)
+        [(#%plain-lambda (x ...) expr)
          (make-closure this-syntax ρ)]
 
         ;; TODO: Remove cut?
-        [(if ~! e0 e1 e2)
-         (define d (eval^ #'e0 ρ))
+        [(if ~! expr0 expr1 expr2)
+         (define d (eval^ #'expr0 ρ))
          (cond
-          [(eq? d #t) (eval^ #'e1 ρ)]
-          [(eq? d #f) (eval^ #'e2 ρ)]
-          [(eq? d  T) (lub (eval^ #'e1 ρ) (eval^ #'e2 ρ))]
+          [(eq? d #t) (eval^ #'expr1 ρ)]
+          [(eq? d #f) (eval^ #'expr2 ρ)]
+          [(eq? d  T) (lub (eval^ #'expr1 ρ) (eval^ #'expr2 ρ))]
           [(eq? d  ⊥) ⊥])]
 
-        [(let-values ~! ([(x:id) e0] ...) e1)
-         (eval^ #'(#%plain-app (#%plain-lambda (x ...) e1) e0 ...) ρ)]
+        [(let-values ~! ([(x:id) expr] ...) expr0)
+         (eval^ #'(#%plain-app (#%plain-lambda (x ...) expr0) expr ...) ρ)]
 
         ;; TODO: Make more similar to equation (single clause?)
-        [(letrec-values ~! ([(x:id) expr0] ...) expr1)
+        [(letrec-values ~! ([(x:id) expr] ...) expr0)
          ;; d = (eval #'expr0 (ρ-set ρ x d))
          (define ρ′
            (for/fold ([ρ ρ])
                      ([x (in-syntax #'(x ...))]
-                      [expr0 (in-syntax #'(expr0 ...))])
-             (define d (delay (eval^/strict expr0 ρ′)))
+                      [expr (in-syntax #'(expr ...))])
+             (define d (delay (eval^/strict expr ρ′)))
              (environment-set ρ x d)))
          (for ([x (in-syntax #'(x ...))])
            (define d (environment-ref ρ′ x))
            (force d))
-         (eval^ #'expr1 ρ′)]))))
+         (eval^ #'expr0 ρ′)]))))
 
 ;; TODO: Make more similiar to equations
 ;; TODO: Fix infinite loop
