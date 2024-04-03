@@ -28,23 +28,20 @@
       (syntax-parse expr
         #:literal-sets (kernel-literals)
 
-        ;; TODO: Make more similar to equation
         [(~and x:id (~fail #:unless (eq? (identifier-binding #'x) 'lexical)))
-         (define d (ρ-ref ρ #'x (⊥ (syntax-e #'x) "unbound identifier")))
-         (if (and (promise? d) (not (promise-forced? d)))
-             (⊥ (syntax-e #'x) "undefined;\n cannot use before initialization")
-             (force d))]
+         (force (ρ-ref ρ #'x))]
 
-        ;; TODO: Make more similar to equation
-        [(quote k)
-         #:fail-when (not (in-domain? (syntax->datum #'k))) "datum not in domain"
-         (syntax-e #'k)]
+        [(quote k) (syntax-e #'k)]
 
-        ;; TODO: Make more similar to equation
-        [o:id
-         (namespace-variable-value (syntax-e #'o)
-                                   #t
-                                   (lambda () (⊥ (syntax-e #'o) "unbound identifier")))]
+        [o:id (namespace-variable-value (syntax-e #'o) #t)]
+
+        [(#%plain-app expr0 expr1 ...)
+         (define fun (eval/strict #'expr0 ρ))
+         (define arg-list
+           (for/list ([expr1 (in-syntax #'(expr1 ...))])
+             (eval/strict expr1 ρ)))
+         ;; TODO: Check if fun is in fact a procedure
+         (abstract-apply fun arg-list)]
 
         [(#%plain-lambda (x:id ...) expr)
          (make-closure this-syntax ρ)]
@@ -52,19 +49,13 @@
         [(if ~! expr0 expr1 expr2)
          (define d (eval/strict #'expr0 ρ))
          (cond
-          [(T? d) (lub (eval #'expr1 ρ)
-                       (eval #'expr2 ρ))]
-          [(eq? d #f)  (eval #'expr2 ρ)]
-          [else        (eval #'expr1 ρ)])]
+          [(eq? d #t) (eval #'expr1 ρ)]
+          [(eq? d #f) (eval #'expr2 ρ)]
+          [(eq? d  T) (lub (eval #'expr1 ρ)
+                           (eval #'expr2 ρ))])]
 
-        ;; TODO: Make more similar to equation (single clause?)
         [(let-values ~! ([(x:id) expr0] ...) expr1)
-         (define ρ′
-           (for/fold ([ρ ρ])
-                     ([x (in-syntax #'(x ...))]
-                      [expr0 (in-syntax #'(expr0 ...))])
-             (ρ-set ρ x (eval/strict expr0 ρ))))
-         (eval #'expr1 ρ′)]
+         (eval #'(#%plain-app (#%plain-lambda (x ...) expr1) expr0 ...) ρ)]
 
         ;; TODO: Make more similar to equation (single clause?)
         [(letrec-values ~! ([(x:id) expr0] ...) expr1)
@@ -77,20 +68,7 @@
          (for ([x (in-syntax #'(x ...))])
            (define d (ρ-ref ρ′ x))
            (force d))
-         (eval #'expr1 ρ′)]
-
-        [(#%plain-app expr0 expr1 ...)
-         (define fun (eval/strict #'expr0 ρ))
-         (define arg-list
-           (for/list ([expr1 (in-syntax #'(expr1 ...))])
-             (eval/strict expr1 ρ)))
-         (abstract-apply fun arg-list)]
-
-        ;; [(#%expression expr) (eval #'expr ρ)]
-
-        [_
-         #:fail-when #t "not implemented"
-         (assert-unreachable)]))))
+         (eval #'expr1 ρ′)]))))
 
 ;; TODO: Make more similiar to equations
 ;; TODO: Fix infinite loop
