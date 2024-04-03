@@ -2,8 +2,8 @@
 
 (provide
  (rename-out
-  [make-immutable-bound-id-table make-ρ]
-  [bound-id-table-ref ρ-ref]
-  [bound-id-table-set ρ-set]))
+  [make-immutable-bound-id-table make-environment]
+  [bound-id-table-ref environment-ref]
+  [bound-id-table-set environment-set]))
 
 (require syntax/id-table)

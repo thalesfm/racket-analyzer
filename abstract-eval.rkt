@@ -21,7 +21,7 @@
 ;; TODO: Convert kernel syntax to the language used in the equations?
 
 ;; TODO: Rename to `abstract-eval` if possible
-(define (abstract-eval-kernel-syntax expr [ρ (make-ρ)])
+(define (abstract-eval-kernel-syntax expr [ρ (make-environment)])
   (let eval ([expr expr] [ρ ρ])
     (let/ec break
       (define (eval/strict expr ρ)
@@ -31,7 +31,7 @@
         #:literal-sets (kernel-literals)
 
         [(~and x:id (~fail #:unless (eq? (identifier-binding #'x) 'lexical)))
-         (define d (ρ-ref ρ #'x))
+         (define d (environment-ref ρ #'x))
          (cond
           [(and (promise? d) (not (promise-forced? d))) ⊥]
           [else (force d)])]
@@ -70,9 +70,9 @@
                      ([x (in-syntax #'(x ...))]
                       [expr0 (in-syntax #'(expr0 ...))])
              (define d (delay (eval/strict expr0 ρ′)))
-             (ρ-set ρ x d)))
+             (environment-set ρ x d)))
          (for ([x (in-syntax #'(x ...))])
-           (define d (ρ-ref ρ′ x))
+           (define d (environment-ref ρ′ x))
            (force d))
          (eval #'expr1 ρ′)]))))
 
@@ -89,7 +89,7 @@
       (for/fold ([ρ (closure-environment proc)])
                 ([x (in-syntax #'(x ...))]
                  [d (in-list args″)])
-        (ρ-set ρ x d)))
+        (environment-set ρ x d)))
     (with-continuation-mark proc args″
       (abstract-eval-kernel-syntax #'expr ρ′))]
    [(procedure? proc)
