@@ -15,60 +15,49 @@
    (expand
     (namespace-syntax-introduce (datum->syntax #f top-level-form) namespace))))
 
-;; TODO: Convert kernel syntax to the language used in the equations?
-
 (define (abstract-eval-kernel-syntax expr [ρ (make-environment)])
-  (define eval^ abstract-eval-kernel-syntax)
-  (syntax-parse expr
-    #:literal-sets (kernel-literals)
+  (let eval ([expr expr] [ρ ρ])
+    (syntax-parse expr
+      #:literal-sets (kernel-literals)
+      ;; FIXME: Re-entrant on bad `letrec`
+      [x:var (force (lookup ρ #'x))]
+      [k:const (attribute k.value)]
+      [o:primop (get-primop (syntax-e #'o))]
 
-    ;; FIXME: Re-entrant on bad `letrec`
-    [x:var (force (lookup ρ #'x))]
+      [(#%plain-app expr0 expr ...)
+       (define proc (eval #'expr0 ρ))
+       (define args
+         (for/list ([expr (in-syntax #'(expr ...))])
+           (eval expr ρ)))
+       (cond
+         [(procedure? proc) (abstract-apply proc args)]
+         [else ⊥])]
 
-    [k:const (attribute k.value)]
+      [(#%plain-lambda (x ...) expr)
+       (lambda args
+         (cond
+          [(ormap ⊥? args) ⊥]
+          [else (eval #'expr (extend* ρ #'(x ...) args))]))]
 
-    [o:primop (get-primop (syntax-e #'o))]
+      [(if expr0 expr1 expr2)
+       (define d (eval #'expr0 ρ))
+       (cond
+        [(eq? d #t) (eval #'expr1 ρ)]
+        [(eq? d #f) (eval #'expr2 ρ)]
+        [(eq? d  T) (lub (eval #'expr1 ρ) (eval #'expr2 ρ))]
+        [(eq? d  ⊥) ⊥])]
 
-    [(#%plain-app expr0 expr ...)
-     (define proc (eval^ #'expr0 ρ))
-     (define args
-       (for/list ([expr (in-syntax #'(expr ...))])
-         (eval^ expr ρ)))
-     (cond
-       [(or (procedure? proc) (closure? proc)) (abstract-apply proc args)]
-       [else ⊥])]
+      [(let-values ([(x) expr] ...) expr0)
+       (eval #'(#%plain-app (#%plain-lambda (x ...) expr0) expr ...) ρ)]
 
-    [(#%plain-lambda (x ...) expr)
-     (lambda args
-       (define ρ′ (extend* ρ #'(x ...) args))
-       (abstract-eval-kernel-syntax #'expr ρ′))]
+      ;; TODO: Make more similar to equation (single clause?)
+      [(letrec-values ([(x) expr] ...) expr0)
+       (define vals
+         (for/list ([expr (in-syntax #'(expr ...))])
+           (delay (eval expr ρ′))))
+       (define ρ′ (extend* ρ #'(x ...) vals))
+       (cond
+        [(ormap (lambda (v) (eq? (force v) ⊥)) vals) ⊥]
+        [else (eval #'expr0 ρ′)])])))
 
-    [(if expr0 expr1 expr2)
-     (define d (eval^ #'expr0 ρ))
-     (cond
-      [(eq? d #t) (eval^ #'expr1 ρ)]
-      [(eq? d #f) (eval^ #'expr2 ρ)]
-      [(eq? d  T) (lub (eval^ #'expr1 ρ) (eval^ #'expr2 ρ))]
-      [(eq? d  ⊥) ⊥])]
-
-    [(let-values ([(x:id) expr] ...) expr0)
-     (eval^ #'(#%plain-app (#%plain-lambda (x ...) expr0) expr ...) ρ)]
-
-    ;; TODO: Make more similar to equation (single clause?)
-    [(letrec-values ([(x:id) expr] ...) expr0)
-     (define v-list
-       (for/list ([x (in-syntax #'(x ...))]
-                  [expr (in-syntax #'(expr ...))])
-         (delay (eval^ expr ρ′))))
-     (define ρ′ (extend* ρ #'(x ...) v-list))
-     (cond
-      [(ormap (lambda (v) (eq? (force v) ⊥)) v-list) ⊥]
-      [else (eval^ #'expr0 ρ′)])]))
-
-;; TODO: Fix infinite loop
-(define (abstract-apply proc args)
-  (cond
-   [(ormap ⊥? args) ⊥]
-   [(procedure? proc)
-    (apply proc args)]
-   [else ⊥]))
+(define abstract-apply apply)
