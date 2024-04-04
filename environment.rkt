@@ -1,21 +1,21 @@
 #lang racket
 
 (provide make-environment
-         environment-ref
-         environment-set
-         environment-set*)
+         lookup
+         extend
+         extend*)
 
 (require syntax/id-table)
 
 (define make-environment make-immutable-bound-id-table)
-(define environment-set bound-id-table-set)
-(define environment-ref bound-id-table-ref)
+(define lookup bound-id-table-ref)
+(define extend bound-id-table-set)
 
-(define (environment-set* ρ id-list v-list)
+(define (extend* ρ id-list v-list)
   (for/fold ([ρ′ ρ])
             ([id (in-syntax id-list)]
              [v  (in-list v-list)])
-    (environment-set ρ′ id v)))
+    (extend ρ′ id v)))
 
 ;; TODO: Implement `environment-union`
 #|

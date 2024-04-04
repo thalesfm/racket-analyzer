@@ -41,7 +41,7 @@
     #:literal-sets (kernel-literals)
 
     ;; FIXME: Re-entrant on bad `letrec`
-    [x:var (force (environment-ref ρ #'x))]
+    [x:var (force (lookup ρ #'x))]
 
     [k:const (attribute k.value)]
 
@@ -58,7 +58,7 @@
 
     [(#%plain-lambda (x ...) expr)
      (lambda args
-       (define ρ′ (environment-set* ρ #'(x ...) args))
+       (define ρ′ (extend* ρ #'(x ...) args))
        (abstract-eval-kernel-syntax #'expr ρ′))]
 
     [(if expr0 expr1 expr2)
@@ -78,7 +78,7 @@
        (for/list ([x (in-syntax #'(x ...))]
                   [expr (in-syntax #'(expr ...))])
          (delay (eval^ expr ρ′))))
-     (define ρ′ (environment-set* ρ #'(x ...) v-list))
+     (define ρ′ (extend* ρ #'(x ...) v-list))
      (cond
       [(ormap (lambda (v) (eq? (force v) ⊥)) v-list) ⊥]
       [else (eval^ #'expr0 ρ′)])]))

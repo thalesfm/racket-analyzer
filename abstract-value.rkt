@@ -62,8 +62,8 @@
   (define ρ2 (closure-environment c2))
   (for/and ([id (in-list (free-vars (closure-source-syntax c1)))])
     (let/ec break
-      (define v1 (environment-ref ρ1 id))
-      (define v2 (environment-ref ρ2 id (lambda () (break #f))))
+      (define v1 (lookup ρ1 id))
+      (define v2 (lookup ρ2 id (lambda () (break #f))))
       (<=?/recur (force v1) (force v2) recur-proc))))
 
 (define (lub d d′)
@@ -103,8 +103,8 @@
   (define ρ″
     (for/fold ([ρ″ (make-environment)])
               ([id (in-list (free-vars (closure-source-syntax c)))])
-      (define d  (force (environment-ref ρ  id)))
-      (define d′ (force (environment-ref ρ′ id ⊥)))
+      (define d  (force (lookup ρ  id)))
+      (define d′ (force (lookup ρ′ id ⊥)))
       (define d″ (recur-proc d d′))
-      (environment-set ρ″ id d″)))
+      (extend ρ″ id d″)))
   (make-closure (closure-source-syntax c) ρ″))
