@@ -94,15 +94,17 @@
    [(and (closure? d )
          (closure? d′)
          (eq? (closure-label d) (closure-label d′)))
-    (make-closure (closure-source-syntax d) (closure-environment-lub/recur d d′ recur-proc))]
+    (closure-lub/recur d d′ recur-proc)]
    [else T]))
 
-(define (closure-environment-lub/recur c c′ recur-proc)
-    (define ρ  (closure-environment c ))
-    (define ρ′ (closure-environment c′))
+(define (closure-lub/recur c c′ recur-proc)
+  (define ρ  (closure-environment c ))
+  (define ρ′ (closure-environment c′))
+  (define ρ″
     (for/fold ([ρ″ (make-environment)])
               ([id (in-list (free-vars (closure-source-syntax c)))])
       (define d  (force (environment-ref ρ  id)))
       (define d′ (force (environment-ref ρ′ id ⊥)))
       (define d″ (recur-proc d d′))
       (environment-set ρ″ id d″)))
+  (make-closure (closure-source-syntax c) ρ″))
