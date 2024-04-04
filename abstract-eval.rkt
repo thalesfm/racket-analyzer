@@ -1,39 +1,21 @@
 #lang racket
 
-(provide abstract-eval
-         abstract-eval-syntax)
+(provide abstract-eval)
 
 (require syntax/parse
          "abstract-value.rkt"
          "environment.rkt"
-         "primitives.rkt")
+         "primop.rkt"
+         "syntax-util.rkt")
 
-;; TODO: Rename `namespace`
-(define (abstract-eval top-level-form [namespace primitives-namespace])
-  (parameterize ([current-namespace namespace])
-    (abstract-eval-syntax
-     (namespace-syntax-introduce
-      (datum->syntax #f top-level-form)))))
+;; (module->namespace 'racket/base)
 
-;; TODO: Rename `namespace`
-(define (abstract-eval-syntax top-level-form [namespace primitives-namespace])
-  (parameterize ([current-namespace namespace])
-    (abstract-eval-kernel-syntax (expand top-level-form))))
+(define (abstract-eval top-level-form [namespace (current-namespace)])
+  (abstract-eval-kernel-syntax
+   (expand
+    (namespace-syntax-introduce (datum->syntax #f top-level-form) namespace))))
 
 ;; TODO: Convert kernel syntax to the language used in the equations?
-
-;; Locally bound identifier
-(define-syntax-class var
-  (pattern (~and id:id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))))
-
-(define-syntax-class const
-  #:literals (quote)
-  (pattern (quote datum) #:attr value (syntax-e #'datum)))
-
-;; TODO: Don´t produce proc directly?
-;; Identifier with top-level binding
-(define-syntax-class primop
-  (pattern id:id #:attr proc (namespace-variable-value (syntax-e #'id) #t)))
 
 (define (abstract-eval-kernel-syntax expr [ρ (make-environment)])
   (define eval^ abstract-eval-kernel-syntax)
@@ -45,7 +27,7 @@
 
     [k:const (attribute k.value)]
 
-    [o:primop (attribute o.proc)]
+    [o:primop (get-primop (syntax-e #'o))]
 
     [(#%plain-app expr0 expr ...)
      (define proc (eval^ #'expr0 ρ))

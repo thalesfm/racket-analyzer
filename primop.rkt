@@ -1,14 +1,17 @@
 #lang racket
 
-(provide primitives-namespace)
+(provide get-primop)
 
 (require syntax/parse/define
          "abstract-value.rkt")
 
-(define primitives-namespace (make-base-namespace))
+(define prim-tab (make-hasheq))
+
+(define (get-primop sym)
+  (hash-ref prim-tab sym))
 
 (define-syntax-parse-rule (define-primitive id:id expr)
-  (namespace-set-variable-value! 'id expr #t primitives-namespace #t))
+  (hash-set! prim-tab 'id expr))
 
 (define-syntax-parse-rule (define-primitive/lift id:id expr)
   (define-primitive id (lift expr)))

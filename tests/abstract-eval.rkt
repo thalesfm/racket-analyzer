@@ -4,6 +4,8 @@
          "../abstract-eval.rkt"
          "../abstract-value.rkt")
 
+(current-namespace (make-base-namespace))
+
 ;; -----------------------------------------------------------------------------
 ;; Checks for datum literals
 
