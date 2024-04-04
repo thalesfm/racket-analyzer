@@ -40,12 +40,8 @@
   (syntax-parse expr
     #:literal-sets (kernel-literals)
 
-    ;; TODO: If possible, remove promise-related stuff
-    [x:var
-     (define d (environment-ref ρ #'x))
-     (cond
-      [(and (promise? d) (not (promise-forced? d))) ⊥]
-      [else (force d)])]
+    ;; FIXME: Re-entrant on bad `letrec`
+    [x:var (force (environment-ref ρ #'x))]
 
     [k:const (attribute k.value)]
 
@@ -60,19 +56,12 @@
        [(or (procedure? proc) (closure? proc)) (abstract-apply proc args)]
        [else ⊥])]
 
-    ;; TODO: Should produce a procedure
     [(#%plain-lambda (x ...) expr)
-     (define (proc . args)
-       (define ρ′
-         (for/fold ([ρ′ ρ])
-                   ([x (in-syntax #'(x ...))]
-                    [d (in-list args)])
-           (environment-set ρ′ x d)))
-       (abstract-eval-kernel-syntax #'expr ρ′))
-     (make-closure this-syntax ρ)]
+     (lambda args
+       (define ρ′ (environment-set* ρ #'(x ...) args))
+       (abstract-eval-kernel-syntax #'expr ρ′))]
 
-    ;; TODO: Remove cut?
-    [(if ~! expr0 expr1 expr2)
+    [(if expr0 expr1 expr2)
      (define d (eval^ #'expr0 ρ))
      (cond
       [(eq? d #t) (eval^ #'expr1 ρ)]
@@ -80,39 +69,24 @@
       [(eq? d  T) (lub (eval^ #'expr1 ρ) (eval^ #'expr2 ρ))]
       [(eq? d  ⊥) ⊥])]
 
-    [(let-values ~! ([(x:id) expr] ...) expr0)
+    [(let-values ([(x:id) expr] ...) expr0)
      (eval^ #'(#%plain-app (#%plain-lambda (x ...) expr0) expr ...) ρ)]
 
     ;; TODO: Make more similar to equation (single clause?)
-    [(letrec-values ~! ([(x:id) expr] ...) expr0)
-     (define ρ′
-       (for/fold ([ρ ρ])
-                 ([x (in-syntax #'(x ...))]
+    [(letrec-values ([(x:id) expr] ...) expr0)
+     (define v-list
+       (for/list ([x (in-syntax #'(x ...))]
                   [expr (in-syntax #'(expr ...))])
-         (define d (delay (eval^ expr ρ′)))
-         (environment-set ρ x d)))
+         (delay (eval^ expr ρ′))))
+     (define ρ′ (environment-set* ρ #'(x ...) v-list))
      (cond
-      [(for/and ([x (in-syntax #'(x ...))])
-         (not (eq? (force (environment-ref ρ′ x)) ⊥)))
-       (eval^ #'expr0 ρ′)]
-      [else ⊥])]))
+      [(ormap (lambda (v) (eq? (force v) ⊥)) v-list) ⊥]
+      [else (eval^ #'expr0 ρ′)])]))
 
-;; TODO: Make more similiar to equations
 ;; TODO: Fix infinite loop
 (define (abstract-apply proc args)
   (cond
    [(ormap ⊥? args) ⊥]
-   [(closure? proc)
-    (define/syntax-parse (_ (x ...) expr) (closure-source-syntax proc))
-    (define args′ (continuation-mark-set-first #f proc))
-    (define args″ (if args′ (map lub args args′) args))
-    (define ρ′
-      (for/fold ([ρ (closure-environment proc)])
-                ([x (in-syntax #'(x ...))]
-                 [d (in-list args″)])
-        (environment-set ρ x d)))
-    (with-continuation-mark proc args″
-      (abstract-eval-kernel-syntax #'expr ρ′))]
    [(procedure? proc)
     (apply proc args)]
    [else ⊥]))

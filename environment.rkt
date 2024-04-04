@@ -1,12 +1,21 @@
-#lang racket/base
+#lang racket
 
-(provide
- (rename-out
-  [make-immutable-bound-id-table make-environment]
-  [bound-id-table-ref environment-ref]
-  [bound-id-table-set environment-set]))
+(provide make-environment
+         environment-ref
+         environment-set
+         environment-set*)
 
 (require syntax/id-table)
+
+(define make-environment make-immutable-bound-id-table)
+(define environment-set bound-id-table-set)
+(define environment-ref bound-id-table-ref)
+
+(define (environment-set* ρ id-list v-list)
+  (for/fold ([ρ′ ρ])
+            ([id (in-syntax id-list)]
+             [v  (in-list v-list)])
+    (environment-set ρ′ id v)))
 
 ;; TODO: Implement `environment-union`
 #|
