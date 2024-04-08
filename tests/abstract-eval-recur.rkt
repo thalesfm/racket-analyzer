@@ -2,23 +2,26 @@
 
 (require rackunit
          "../abstract-eval.rkt"
-         "../domain.rkt")
+         "../abstract-value.rkt")
+
+(current-namespace (make-base-namespace))
 
 ;; -----------------------------------------------------------------------------
 ;; Checks for recursive procedures
 
 (displayln "test1")
-(check-equal? 120
+(check-equal?
  (abstract-eval
   '(let ()
      (define (f n)
        (if (= n 0)
            1
            (* n (f (- n 1)))))
-     (f 5))))
+     (f 5)))
+ 120)
 
 (displayln "test2")
-(check-equal? 120
+(check-equal?
  (abstract-eval
   '(let ()
      (define (Y f)
@@ -28,7 +31,8 @@
        (if (= n 0)
            1
            (* n (r (- n 1)))))
-     ((Y f) 5))))
+     ((Y f) 5)))
+ 120)
 
 (displayln "test3")
 (check-equal?

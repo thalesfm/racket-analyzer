@@ -11,17 +11,19 @@
   (hash-ref prim-tab sym))
 
 (define-syntax-parse-rule (define-primitive id:id expr)
-  (hash-set! prim-tab 'id expr))
+  (hash-set! prim-tab id expr))
 
 (define-syntax-parse-rule (define-primitive/lift id:id expr)
   (define-primitive id (lift expr)))
 
-(define ((lift proc) . args)
-  (cond
-   [(not (procedure-arity-includes? proc (length args))) ⊥]
-   [(andmap natural? args) (apply proc args)]
-   [(ormap ⊥? args) ⊥]
-   [else T]))
+(define (lift proc)
+  (define (proc′ . args)
+    (cond
+     [(not (procedure-arity-includes? proc (length args))) ⊥]
+     [(andmap natural? args) (apply proc args)]
+     [(ormap ⊥? args) ⊥]
+     [else T]))
+  (procedure-rename proc′ (object-name proc)))
 
 (define-primitive/lift read
   (lambda () T))

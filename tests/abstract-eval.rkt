@@ -22,16 +22,16 @@
 ;; -----------------------------------------------------------------------------
 ;; Checks for `let` expressions
 
-(check-equal? 5 (abstract-eval '(let ([x 5]) x)))
-(check-equal? 7 (abstract-eval '(let ([x 3] [y 4]) (+ x y))))
-(check-equal? 6 (abstract-eval '(let ([x 5]) (let ([x 6]) x))))
+(check-equal? (abstract-eval '(let ([x 5]) x)) 5)
+(check-equal? (abstract-eval '(let ([x 3] [y 4]) (+ x y))) 7)
+(check-equal? (abstract-eval '(let ([x 5]) (let ([x 6]) x))) 6)
 
 ;; -----------------------------------------------------------------------------
 ;; Checks for `letrec` expressions
 
-(check-equal? 3  (abstract-eval '(letrec ([x 3]) x)))
-(check-equal? 7  (abstract-eval '(letrec ([x 3] [y 4]) (+ x y))))
-(check-equal? 6  (abstract-eval '(letrec ([x 5]) (letrec ([x 6]) x))))
+(check-equal? (abstract-eval '(letrec ([x 3]) x)) 3)
+(check-equal? (abstract-eval '(letrec ([x 3] [y 4]) (+ x y))) 7)
+(check-equal? (abstract-eval '(letrec ([x 5]) (letrec ([x 6]) x))) 6)
 ;; Regression
 ;; (check-pred   ⊥? (abstract-eval '(letrec ([x x]) x)))
 (check-equal? 5  (abstract-eval '(letrec ([x 5] [y x]) y)))

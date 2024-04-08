@@ -22,7 +22,7 @@
       ;; FIXME: Re-entrant on bad `letrec`
       [x:var (force (lookup ρ #'x))]
       [k:const (attribute k.value)]
-      [o:primop (get-primop (syntax-e #'o))]
+      [o:primop (get-primop (namespace-variable-value (syntax-e #'o) #t))]
 
       [(#%plain-app expr0 expr ...)
        (define proc (eval #'expr0 ρ))
@@ -34,10 +34,11 @@
          [else ⊥])]
 
       [(#%plain-lambda (x ...) expr)
-       (lambda args
+       (define (proc . args)
          (cond
           [(ormap ⊥? args) ⊥]
-          [else (eval #'expr (extend* ρ #'(x ...) args))]))]
+          [else (eval #'expr (extend* ρ #'(x ...) args))]))
+       (procedure-rename proc (gensym))]
 
       [(if expr0 expr1 expr2)
        (define d (eval #'expr0 ρ))
@@ -50,14 +51,54 @@
       [(let-values ([(x) expr] ...) expr0)
        (eval #'(#%plain-app (#%plain-lambda (x ...) expr0) expr ...) ρ)]
 
-      ;; TODO: Make more similar to equation (single clause?)
-      [(letrec-values ([(x) expr] ...) expr0)
-       (define vals
-         (for/list ([expr (in-syntax #'(expr ...))])
-           (delay (eval expr ρ′))))
-       (define ρ′ (extend* ρ #'(x ...) vals))
-       (cond
-        [(ormap (lambda (v) (eq? (force v) ⊥)) vals) ⊥]
-        [else (eval #'expr0 ρ′)])])))
+      ;; TODO: letrec for regular values (not procedures)
 
-(define abstract-apply apply)
+      [(letrec-values ([(x) (~and expr (#%plain-lambda . _))] ...) expr0)
+       (define vals
+         (for/list ([x (in-syntax #'(x ...))]
+                    [expr (in-syntax #'(expr ...))])
+           (make-recursive
+             (lambda (val)
+               (eval expr (extend ρ x val))))))
+       (eval #'expr0 (extend* ρ #'(x ...) vals))])))
+
+;; (struct labelled-procedure (label proc)
+;;  #:property prop:procedure (struct-field-index proc))
+;; (define procedure-label labelled-procedure-label)
+
+(define current-stack (make-parameter (hasheq)))
+
+;; Todo: check if it's abstract procedure or not
+(define (abstract-apply proc args)
+  (printf "(abstract-apply ~a args)~n" proc)
+  (let* ([args′ (hash-ref (current-stack) (object-name proc) (make-list (length args) ⊥))]
+         [args″ (map lub args args′)])
+    (printf "  (object-name proc) -> ~a~n" (object-name proc))
+    (printf "  args   = ~a~n" args )
+    (printf "  args'  = ~a~n" args′)
+    (printf "  args'' = ~a~n" args″)
+    (parameterize ([current-stack (hash-set (current-stack) (object-name proc) args″)])
+      (apply proc args″))))
+
+(define (make-recursive phi)
+  (letrec ([psi (procedure-rename
+                  (lambda (arg)
+                    (iterate-fixpoint
+                      (lambda (v) ((phi (subst psi arg v)) arg))))
+                  (gensym))])
+    psi))
+
+#;(define ((make-recursive proc) arg)
+  (iterate-fixpoint
+    (lambda (curr)
+      (proc (subst (make-recursive proc) arg curr) arg))))
+
+(define (iterate-fixpoint proc [v0 ⊥])
+  (printf "(iterate-fixpoint ~a ~a)~n" proc v0)
+  (let ([v1 (proc v0)])
+    (if (<=? v1 v0) v0 (iterate-fixpoint proc v1))))
+
+(define (subst proc arg v)
+  (define (proc′ arg′)
+    (if (eqv? arg arg′) v (proc arg′)))
+  (procedure-rename proc′ (object-name proc)))
