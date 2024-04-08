@@ -4,15 +4,20 @@
 
 (require syntax/parse)
 
-;; Locally bound identifier
+(define (identifier-binding-local? id)
+  (eq? (identifier-binding id) 'lexical))
+
+(define (identifier-binding-module? id)
+   (list? (identifier-binding id)))
+
 (define-syntax-class var
-  (pattern (~and id:id (~fail #:unless (eq? (identifier-binding #'id) 'lexical)))))
+  (pattern id:id #:when (identifier-binding-local? #'id)))
 
 (define-syntax-class const
   #:literals (quote)
-  (pattern (quote datum) #:attr value (syntax-e #'datum)))
+  (pattern (quote datum)
+           #:attr value (syntax-e #'datum)))
 
-;; TODO: Actually check if id has a top-level-binding
-;; Identifier with top-level binding
 (define-syntax-class primop
-  (pattern id:id))
+  (pattern id:id #:when (identifier-binding-module? #'id)
+           #:attr value (namespace-variable-value (syntax-e #'id) #t)))

@@ -22,7 +22,7 @@
       ;; FIXME: Re-entrant on bad `letrec`
       [x:var (force (lookup ρ #'x))]
       [k:const (attribute k.value)]
-      [o:primop (get-primop (namespace-variable-value (syntax-e #'o) #t))]
+      [o:primop (get-primop (attribute o.value))]
 
       [(#%plain-app expr0 expr ...)
        (define proc (eval #'expr0 ρ))
@@ -70,13 +70,8 @@
 
 ;; Todo: check if it's abstract procedure or not
 (define (abstract-apply proc args)
-  (printf "(abstract-apply ~a args)~n" proc)
   (let* ([args′ (hash-ref (current-stack) (object-name proc) (make-list (length args) ⊥))]
          [args″ (map lub args args′)])
-    (printf "  (object-name proc) -> ~a~n" (object-name proc))
-    (printf "  args   = ~a~n" args )
-    (printf "  args'  = ~a~n" args′)
-    (printf "  args'' = ~a~n" args″)
     (parameterize ([current-stack (hash-set (current-stack) (object-name proc) args″)])
       (apply proc args″))))
 
@@ -88,13 +83,7 @@
                   (gensym))])
     psi))
 
-#;(define ((make-recursive proc) arg)
-  (iterate-fixpoint
-    (lambda (curr)
-      (proc (subst (make-recursive proc) arg curr) arg))))
-
 (define (iterate-fixpoint proc [v0 ⊥])
-  (printf "(iterate-fixpoint ~a ~a)~n" proc v0)
   (let ([v1 (proc v0)])
     (if (<=? v1 v0) v0 (iterate-fixpoint proc v1))))
 

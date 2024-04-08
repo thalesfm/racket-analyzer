@@ -62,11 +62,12 @@
 (check-pred   ⊥? (abstract-eval '((error) 3 4)))
 (check-pred   ⊥? (abstract-eval '(+ 3 (error))))
 
-(check-equal? 3
+(check-equal?
  (abstract-eval
   '(let* ([c (lambda (k) (lambda (x) k))]
           [f (if (read) (c 3) (c 3))])
-     (f 7))))
+     (f 7)))
+ 3)
 
 (check-equal? T
  (abstract-eval
